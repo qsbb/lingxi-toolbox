@@ -9,6 +9,32 @@
                  WindowBackdropType="None"
                  FontFamily="Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI">
 
+    <Window.Resources>
+        <!-- 侧栏底部固定"设置"导航钮（外观对齐 LxNavList 行项：圆角行 + 悬停玻璃 + 选中 NavActive） -->
+        <Style x:Key="LxSettingsNavButton" TargetType="ToggleButton">
+            <Setter Property="Foreground" Value="{DynamicResource LxTextPrimaryBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Root" CornerRadius="10" Padding="12,9" Margin="8,2" Background="Transparent">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource LxGlassFillBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource LxNavActiveBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -32,6 +58,18 @@
                     <Button DockPanel.Dock="Bottom" Content="切换主题"
                             Style="{StaticResource LxPillButton}"
                             Margin="12,8" Click="ThemeToggle_Click" />
+                    <!-- 固定"设置"导航项：壳内置页，不依赖模块注册（Dock 顺序在主题按钮之上） -->
+                    <ToggleButton DockPanel.Dock="Bottom" x:Name="SettingsNavButton"
+                                  Style="{StaticResource LxSettingsNavButton}"
+                                  Click="SettingsNav_Click"
+                                  ToolTip="设置">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="26">
+                                <ui:SymbolIcon Symbol="Settings20" FontSize="18" />
+                            </Border>
+                            <TextBlock Text="设置" FontSize="13" Margin="10,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </ToggleButton>
                     <ListBox x:Name="NavList"
                              Style="{StaticResource LxNavList}"
                              SelectionChanged="NavList_SelectionChanged" />

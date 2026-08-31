@@ -21,6 +21,7 @@ public partial class DashboardViewModel : ObservableObject
     private readonly MonitorSettings _settings;
     private readonly Action _saveSettings;
     private readonly ILxLog _log;
+    private readonly Action? _reportersChanged;
     private readonly Dictionary<string, MachineCardVm> _byName = new(StringComparer.Ordinal);
     private readonly Dictionary<string, MachineProfile> _profiles = new(StringComparer.Ordinal);
 
@@ -70,12 +71,23 @@ public partial class DashboardViewModel : ObservableObject
     /// <summary>输入对话框（title, 当前值） → 新值或 null=取消；由模块层接入 InputBoxWindow。</summary>
     public Func<string, string, string?>? Prompt { get; set; }
 
-    public DashboardViewModel(SnapshotStore store, MonitorSettings settings, Action saveSettings, ILxLog log)
+    /// <summary>上报目标编辑对话框：入参 null=新增（内部克隆展示），返回编辑结果或 null=取消；由模块层接入 ReporterEditorWindow。</summary>
+    public Func<ReporterTarget?, ReporterTarget?>? EditReporter { get; set; }
+
+    /// <summary>上报目标可视化管理行（与 settings.Reporters 源对象一一对应）。</summary>
+    public ObservableCollection<ReporterTargetVm> ReporterTargets { get; } = [];
+
+    [ObservableProperty]
+    private bool _hasReporterTargets;
+
+    public DashboardViewModel(SnapshotStore store, MonitorSettings settings, Action saveSettings, ILxLog log,
+        Action? reportersChanged = null)
     {
         _store = store;
         _settings = settings;
         _saveSettings = saveSettings;
         _log = log;
+        _reportersChanged = reportersChanged;
 
         // 档案加载（Name 唯一键；重复名保留首个，脏档案跳过）
         foreach (var profile in settings.MachineProfiles)
@@ -100,6 +112,9 @@ public partial class DashboardViewModel : ObservableObject
         {
             EnsureCard(name);
         }
+
+        // 上报目标可视化管理行（双向监控）
+        RebuildReporterTargets();
     }
 
     /// <summary>上报成功回调（来自 SnapshotReporter.Reported）。</summary>
@@ -108,13 +123,15 @@ public partial class DashboardViewModel : ObservableObject
         var existing = ReporterStatuses.FirstOrDefault(r => r.Url == url);
         if (existing is null)
         {
-            ReporterStatuses.Add(new ReporterStatusVm(url, true, elapsed));
+            existing = new ReporterStatusVm(url, true, elapsed);
+            ReporterStatuses.Add(existing);
         }
         else
         {
             existing.Update(true, elapsed);
         }
         HasReporters = true;
+        ReporterTargets.FirstOrDefault(r => r.Source.Url == url)?.AttachStatus(existing);
     }
 
     /// <summary>上报失败回调（UI 层可调用）。</summary>
@@ -123,12 +140,14 @@ public partial class DashboardViewModel : ObservableObject
         var existing = ReporterStatuses.FirstOrDefault(r => r.Url == url);
         if (existing is null)
         {
-            ReporterStatuses.Add(new ReporterStatusVm(url, false, null, reason));
+            existing = new ReporterStatusVm(url, false, null, reason);
+            ReporterStatuses.Add(existing);
         }
         else
         {
             existing.Update(false, null, reason);
         }
+        ReporterTargets.FirstOrDefault(r => r.Source.Url == url)?.AttachStatus(existing);
     }
 
     /// <summary>上报目标状态行（URL → 最近一次上报结果）。</summary>
@@ -310,6 +329,120 @@ public partial class DashboardViewModel : ObservableObject
         ReorderMachines();
         SaveAndLog($"恢复显示机器 {card.Name}");
     }
+
+    // ============ 命令：上报目标管理（双向监控） ============
+
+    [RelayCommand]
+    private void AddReporterTarget()
+    {
+        if (EditReporter is null)
+        {
+            _log.Warn("上报目标编辑对话框未接入，忽略操作");
+            return;
+        }
+        var result = EditReporter.Invoke(null);
+        if (result is null)
+        {
+            return; // 用户取消
+        }
+        _settings.Reporters.Add(result);
+        RebuildReporterTargets();
+        SaveAndLog($"新增上报目标 {result.Url}（间隔 {result.IntervalSec}s，{(result.Enabled ? "启用" : "停用")}）");
+        _reportersChanged?.Invoke();
+    }
+
+    [RelayCommand]
+    private void EditReporterTarget(ReporterTargetVm? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+        if (EditReporter is null)
+        {
+            _log.Warn("上报目标编辑对话框未接入，忽略操作");
+            return;
+        }
+        var result = EditReporter.Invoke(CloneTarget(row.Source));
+        if (result is null)
+        {
+            return; // 用户取消
+        }
+        row.Source.Url = result.Url;
+        row.Source.Token = result.Token;
+        row.Source.Name = result.Name;
+        row.Source.IntervalSec = result.IntervalSec;
+        row.Source.TimeoutMs = result.TimeoutMs;
+        row.Source.Enabled = result.Enabled;
+        RebuildReporterTargets();
+        SaveAndLog($"修改上报目标 → {row.Source.Url}（间隔 {row.Source.IntervalSec}s，{(row.Source.Enabled ? "启用" : "停用")}）");
+        _reportersChanged?.Invoke();
+    }
+
+    [RelayCommand]
+    private void DeleteReporterTarget(ReporterTargetVm? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+        // 二次确认：第一次点击进入确认态，3 秒未确认自动复位
+        if (!row.ConfirmingDelete)
+        {
+            row.ConfirmingDelete = true;
+            _ = Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => Application.Current?.Dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    if (row.ConfirmingDelete)
+                    {
+                        row.ConfirmingDelete = false;
+                    }
+                })));
+            return;
+        }
+        _settings.Reporters.Remove(row.Source);
+        RebuildReporterTargets();
+        SaveAndLog($"删除上报目标 {row.Url}");
+        _reportersChanged?.Invoke();
+    }
+
+    /// <summary>启用开关写回（行 VM 调用；不重建行集合，避免打断绑定）。</summary>
+    internal void SetTargetEnabled(ReporterTargetVm row, bool enabled)
+    {
+        row.RefreshDetail();
+        SaveAndLog($"上报目标 {row.Url} → {(enabled ? "启用" : "停用")}");
+        _reportersChanged?.Invoke();
+    }
+
+    /// <summary>从 settings.Reporters 重建目标行（新增/编辑/删除后调用；同时清掉已删目标的陈旧状态）。</summary>
+    public void RebuildReporterTargets()
+    {
+        ReporterTargets.Clear();
+        foreach (var target in _settings.Reporters)
+        {
+            var row = new ReporterTargetVm(target, this);
+            row.AttachStatus(ReporterStatuses.FirstOrDefault(s => s.Url == target.Url));
+            ReporterTargets.Add(row);
+        }
+        foreach (var status in ReporterStatuses.ToList())
+        {
+            if (!ReporterTargets.Any(r => r.Source.Url == status.Url))
+            {
+                ReporterStatuses.Remove(status);
+            }
+        }
+        HasReporterTargets = ReporterTargets.Count > 0;
+    }
+
+    private static ReporterTarget CloneTarget(ReporterTarget t) => new()
+    {
+        Url = t.Url,
+        Token = t.Token,
+        Name = t.Name,
+        Enabled = t.Enabled,
+        IntervalSec = t.IntervalSec,
+        TimeoutMs = t.TimeoutMs,
+    };
 
     // ============ 内部：卡片构建 / 排序 / 档案 ============
 

@@ -22,6 +22,9 @@
     <Style x:Key="LxDeviceCard" TargetType="controls:LxGlassCard">
         <Setter Property="Padding" Value="16" />
         <Setter Property="Margin" Value="0,0,0,16" />
+        <!-- 缺陷 2：设备卡本体圆角显式走 LxRadiusSheet(=20)（大面卡片=圆角矩形），
+             覆盖 LX.Ui Generic.xaml 默认的 LxRadiusCard(=16)，令牌依赖显式化；胶囊仅保留给文字 pill/HUD -->
+        <Setter Property="CornerRadius" Value="{DynamicResource LxRadiusSheet}" />
         <Style.Triggers>
             <DataTrigger Binding="{Binding IsCurrent}" Value="True">
                 <Setter Property="BorderBrush" Value="{DynamicResource LxTintBrush}" />
@@ -51,7 +54,9 @@
     <Style x:Key="LxCurrentBadge" TargetType="Border">
         <Setter Property="Width" Value="26" />
         <Setter Property="Height" Value="26" />
-        <Setter Property="CornerRadius" Value="{DynamicResource LxRadiusCapsule}" />
+        <!-- 缺陷 2：26×26 对勾徽章从胶囊（999 → 全圆/椭圆感）改为圆角矩形，取 LxRadiusControl(=10，
+             落在要求的 8~10 区间且保持令牌引用、不硬编码）；对勾内容由 AudioView 的自绘 Path 承载 -->
+        <Setter Property="CornerRadius" Value="{DynamicResource LxRadiusControl}" />
         <Setter Property="Background" Value="{DynamicResource LxNavActiveBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource LxTintBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -81,6 +86,7 @@
     </Style>
 
     <Style x:Key="LxCountBadge" TargetType="Border">
+        <!-- 数量徽章语义=文字 pill，按缺陷 2 原则保留胶囊 -->
         <Setter Property="CornerRadius" Value="{DynamicResource LxRadiusCapsule}" />
         <Setter Property="Background" Value="{DynamicResource LxNavActiveBrush}" />
         <Setter Property="Padding" Value="8,2" />
@@ -110,6 +116,7 @@
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="VerticalAlignment" Value="Top" />
         <Setter Property="Margin" Value="0,10,0,0" />
+        <!-- HUD 浮层语义=浮层提示，按缺陷 2 原则保留胶囊 -->
         <Setter Property="CornerRadius" Value="{DynamicResource LxRadiusCapsule}" />
         <Setter Property="Background" Value="{DynamicResource LxPillInfoBgBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource LxGlassBorderBrush}" />

@@ -27,6 +27,9 @@ public partial class App : Application
     private MainWindow _mainWindow = null!;
     private bool _dark;
 
+    /// <summary>当前是否深色主题（设置页开关初始态用）。</summary>
+    public bool IsDarkNow => _dark;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         // 全局异常钩子：记录后尽量存活（开发文档 10.3 健壮性）
@@ -115,14 +118,24 @@ public partial class App : Application
 
         _mainWindow = new MainWindow(_settings);
         _mainWindow.ThemeToggleRequested += ToggleTheme;
+        // 关窗且未驻留托盘 → 走壳完整退出（模块逆序清理 + 托盘销毁）
+        _mainWindow.ExitRequested += ExitApp;
 
         ILxModuleContext MakeContext(string moduleId) => new ModuleContext(
             _settings, log, _tray, hotkeys, notify,
             id => _mainWindow.NavigateTo(id));
 
-        // 模块装载：单模块失败不拖垮壳（开发文档 10.3）
+        // 模块装载：单模块失败不拖垮壳（开发文档 10.3）；
+        // 设置页禁用的模块（shell.disabledModules）在装载前直接跳过——
+        // 未 Initialize 即无托盘/热键等已注册资源，无需清理路径；运行中模块禁用则"重启后生效"。
+        var disabledModules = new HashSet<string>(shell.DisabledModules ?? [], StringComparer.Ordinal);
         foreach (var module in provider.GetServices<ILxToolModule>())
         {
+            if (disabledModules.Contains(module.Id))
+            {
+                log.Info($"模块 {module.Id} 已在设置中禁用，跳过加载");
+                continue;
+            }
             try
             {
                 module.Initialize(MakeContext(module.Id));

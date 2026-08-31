@@ -13,6 +13,8 @@
                 <!-- 自有设计令牌 -->
                 <ResourceDictionary Source="pack://application:,,,/LX.Ui;component/Themes/Tokens.Light.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/LX.Ui;component/Themes/Glass.xaml" />
+                <!-- 壳内 iOS 风格拨动开关（设置页用；模块内资源，不动 LX.Ui 公共样式） -->
+                <ResourceDictionary Source="pack://application:,,,/LX.App;component/Themes/ToggleSwitch.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

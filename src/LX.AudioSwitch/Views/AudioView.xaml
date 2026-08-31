@@ -28,12 +28,18 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- 设备类型大图标（Segoe Fluent Icons，MDL2 兜底） -->
+                        <!--
+                          设备类型大图标 chip（缺陷 2）：46×46 + 圆角 12 = iOS26 连续曲率圆角矩形（squircle 观感）；
+                          LxRadiusControl=10 偏小，chip 专用 12（仅形状定值，无色值硬编码）。
+                          缺陷 1：字形三级回退 Fluent → MDL2 → Segoe UI Symbol；码位已逐一核对 MDL2 官方表：
+                          E767 扬声器(Volume) / E7F3 耳机(SettingsDisplaySound) / E7F4 显示器(TVMonitor) /
+                          E720 麦克风(Microphone) 均为标准码位；WPF 无 FallbackText，按"默认 Text 保持字形 + 码位核对"兜底。
+                        -->
                         <Border Width="46" Height="46"
-                                CornerRadius="{DynamicResource LxRadiusControl}"
+                                CornerRadius="12"
                                 Background="{DynamicResource LxNavActiveBrush}">
                             <TextBlock Text="{Binding IconGlyph}"
-                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol"
                                        FontSize="20"
                                        Foreground="{DynamicResource LxTintBrush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -62,14 +68,19 @@
                                        Style="{StaticResource LxCaption}" Margin="0,3,0,0" />
                         </Grid>
 
-                        <!-- 当前设备对勾徽章（仅当前设备显示，接管"切换"按钮的位置） -->
+                        <!--
+                          当前设备对勾徽章（仅当前设备显示，接管"切换"按钮的位置）。
+                          缺陷 1+2：对勾改 Path 自绘（M0,5 L4,9 L11,0 式，去字体依赖）；
+                          徽章本体在 ModuleStyles.LxCurrentBadge 同步改为圆角矩形（LxRadiusControl=10）。
+                        -->
                         <Border Grid.Column="2" Style="{StaticResource LxCurrentBadge}" Margin="0,0,12,0"
                                 VerticalAlignment="Center">
-                            <TextBlock Text="&#xE73E;"
-                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                       FontSize="12"
-                                       Foreground="{DynamicResource LxTintBrush}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Path Data="M0,5 L4,9 L11,0"
+                                  Width="11" Height="9"
+                                  Stroke="{DynamicResource LxTintBrush}"
+                                  StrokeThickness="2"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
 
                         <!-- 切换按钮（仅非当前设备显示；已拔出设备置灰） -->
@@ -79,12 +90,23 @@
                                 Command="{Binding DataContext.SwitchCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                 CommandParameter="{Binding}" />
 
-                        <!-- 移除保存记录（ghost 图标钮，保留原有功能） -->
+                        <!--
+                          移除保存记录（ghost 图标钮，保留原有功能）。
+                          缺陷 1 修复：E74D(Delete) 在部分机器字形缺失/FontFamily 回退失败 → 渲染成 □ 豆腐块；
+                          改用 Path 自绘"×"（两条线交叉 Geometry，11×11，Stroke 走 LxTextSecondaryBrush 令牌），
+                          彻底摆脱图标字体依赖；ToolTip 与命令绑定保留。
+                        -->
                         <Button Grid.Column="4" Style="{StaticResource LxIconGhostButton}"
-                                Content="&#xE74D;" FontSize="13" Margin="6,0,0,0" VerticalAlignment="Center"
+                                Margin="6,0,0,0" VerticalAlignment="Center"
                                 ToolTip="移除已保存设备"
                                 Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                CommandParameter="{Binding}" />
+                                CommandParameter="{Binding}">
+                            <Path Data="M0,0 L11,11 M11,0 L0,11"
+                                  Width="11" Height="11"
+                                  Stroke="{DynamicResource LxTextSecondaryBrush}"
+                                  StrokeThickness="1.5"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                        </Button>
 
                         <!-- 切换成功瞬时高亮层：置于内容之上，蓝色脉冲淡出（动画在 LxCardFlashLayer） -->
                         <Border Grid.ColumnSpan="5" Style="{StaticResource LxCardFlashLayer}" />
@@ -122,11 +144,11 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="48" Height="48" CornerRadius="{DynamicResource LxRadiusControl}"
+                    <Border Width="48" Height="48" CornerRadius="12"
                             Background="{DynamicResource LxGlassFillBrush}"
                             BorderBrush="{DynamicResource LxGlassBorderBrush}" BorderThickness="1">
                         <TextBlock Text="&#xE767;"
-                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol"
                                    FontSize="20"
                                    Foreground="{DynamicResource LxTintBrush}"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -167,7 +189,7 @@
                         </Border.Style>
                         <StackPanel>
                             <TextBlock Text="&#xE767;"
-                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol"
                                        FontSize="22"
                                        Foreground="{DynamicResource LxTextSecondaryBrush}"
                                        HorizontalAlignment="Center" />
@@ -207,7 +229,7 @@
                         </Border.Style>
                         <StackPanel>
                             <TextBlock Text="&#xE720;"
-                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol"
                                        FontSize="22"
                                        Foreground="{DynamicResource LxTextSecondaryBrush}"
                                        HorizontalAlignment="Center" />
@@ -232,10 +254,10 @@
                         </Grid.ColumnDefinitions>
 
                         <Border Width="44" Height="44"
-                                CornerRadius="{DynamicResource LxRadiusControl}"
+                                CornerRadius="12"
                                 Background="{DynamicResource LxGlassFillBrush}">
                             <TextBlock Text="&#xE765;"
-                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol"
                                        FontSize="19"
                                        Foreground="{DynamicResource LxTintBrush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -279,7 +301,7 @@
         <Border Style="{StaticResource LxSwitchHud}">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="&#xE73E;"
-                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol"
                            FontSize="13"
                            Foreground="{DynamicResource LxStatusOkFgBrush}" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding SwitchHudText}" Margin="8,0,0,0" FontSize="13" FontWeight="SemiBold"

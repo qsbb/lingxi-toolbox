@@ -100,7 +100,9 @@ public sealed class MonitorModule : ILxToolModule
             _store, _settings,
             // 档案改动即时写回 settings（同 HubToken 首次生成的写法）
             () => _ctx.Settings.Set("lx.monitor", _settings),
-            ctx.Log)
+            ctx.Log,
+            // 上报目标改动（新增/编辑/删除/启停）→ 重启全部 Reporter 立即生效
+            ApplyReporters)
         {
             HubReportUrl = _hub.ReportUrl,
             LanReportUrl = lanReportUrl,
@@ -110,26 +112,10 @@ public sealed class MonitorModule : ILxToolModule
         };
         _vm.Prompt = (title, current) =>
             Views.InputBoxWindow.Show(title, "输入该机器的显示别名（留空恢复原名称）", current);
+        _vm.EditReporter = target => Views.ReporterEditorWindow.Show(target);
 
         // 上报端（双向监控）：把本机指标按 servermonitor 协议上报给各目标服务器
-        foreach (var target in settings.Reporters.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.Url)))
-        {
-            try
-            {
-                var reporter = new SnapshotReporter(target);
-                reporter.Log += msg => ctx.Log.Info(msg);
-                // 回调来自后台线程，Marshal 回 UI 线程再动 ObservableCollection
-                reporter.Reported += elapsed => Application.Current?.Dispatcher.BeginInvoke(
-                    (Action)(() => _vm?.MarkReporterOk(target.Url, elapsed)));
-                reporter.Start();
-                _reporters.Add(reporter);
-                ctx.Log.Info($"上报端已启动 → {target.Url}（间隔 {target.IntervalSec}s）");
-            }
-            catch (Exception ex)
-            {
-                ctx.Log.Error($"上报端启动失败 {target.Url}", ex);
-            }
-        }
+        StartReporters();
 
         _sweepTimer = new System.Windows.Threading.DispatcherTimer
         {
@@ -167,6 +153,59 @@ public sealed class MonitorModule : ILxToolModule
     public System.Windows.FrameworkElement CreateMainView() =>
         new Views.DashboardView { DataContext = _vm };
 
+    /// <summary>
+    /// 按当前配置重启全部上报端（上报目标可视化管理保存后调用，立即生效）：
+    /// Dispose 旧的 SnapshotReporter，再按 settings.Reporters 重新 Start。
+    /// </summary>
+    public void ApplyReporters()
+    {
+        if (_settings is null || _ctx is null)
+        {
+            return; // 尚未 Initialize（回调只会经 VM 在初始化后触发）
+        }
+        StopReporters();
+        StartReporters();
+    }
+
+    private void StartReporters()
+    {
+        foreach (var target in _settings.Reporters.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.Url)))
+        {
+            try
+            {
+                var reporter = new SnapshotReporter(target);
+                reporter.Log += msg => _ctx.Log.Info(msg);
+                // 回调来自后台线程，Marshal 回 UI 线程再动 ObservableCollection
+                var url = target.Url;
+                reporter.Reported += elapsed => Application.Current?.Dispatcher.BeginInvoke(
+                    (Action)(() => _vm?.MarkReporterOk(url, elapsed)));
+                reporter.Start();
+                _reporters.Add(reporter);
+                _ctx.Log.Info($"上报端已启动 → {url}（间隔 {target.IntervalSec}s）");
+            }
+            catch (Exception ex)
+            {
+                _ctx.Log.Error($"上报端启动失败 {target.Url}", ex);
+            }
+        }
+    }
+
+    private void StopReporters()
+    {
+        foreach (var reporter in _reporters)
+        {
+            try
+            {
+                reporter.Dispose();
+            }
+            catch
+            {
+                // 单个上报端清理失败不阻塞其余
+            }
+        }
+        _reporters.Clear();
+    }
+
     /// <summary>第一个非回环 IPv4（Up 状态、非 Loopback 接口）；取不到或异常回退 127.0.0.1。</summary>
     private static string GetLanIpv4()
     {
@@ -190,18 +229,7 @@ public sealed class MonitorModule : ILxToolModule
     public void Shutdown()
     {
         _sweepTimer?.Stop();
-        foreach (var reporter in _reporters)
-        {
-            try
-            {
-                reporter.Dispose();
-            }
-            catch
-            {
-                // 清理失败不阻塞
-            }
-        }
-        _reporters.Clear();
+        StopReporters();
         _agent?.Dispose();
         _hub?.Dispose();
     }

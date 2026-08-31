@@ -1,0 +1,52 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      iOS26 风格拨动开关（LX.App 壳内资源，不改 LX.Ui 公共样式）。
+      冻结陷阱遵守：
+      - 无 Effect（DropShadowEffect）资源项，杜绝 StaticResource 共享冻结异常；
+      - 状态切换全部用 Setter 直切，Triggers 内禁止 EnterActions/ExitActions Storyboard；
+      - 颜色一律 DynamicResource 令牌；拨杆固定白色为主题无关色
+        （iOS HIG 拨杆两主题均为白色，与 LX.Ui 中 LxAccentPillButton 的 White 前景同一先例）。
+    -->
+
+    <!-- 拨杆固定白色（主题无关唯一亮元素） -->
+    <SolidColorBrush x:Key="LxSwitchThumbBrush" Color="#FFFFFFFF" />
+
+    <Style x:Key="LxToggleSwitch" TargetType="CheckBox">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid Width="46" Height="28">
+                        <Border x:Name="Track"
+                                CornerRadius="14"
+                                Background="{DynamicResource LxGlassFillBrush}"
+                                BorderBrush="{DynamicResource LxGlassBorderBrush}"
+                                BorderThickness="1" />
+                        <Border x:Name="Thumb"
+                                Width="22" Height="22" CornerRadius="11"
+                                Background="{DynamicResource LxSwitchThumbBrush}"
+                                HorizontalAlignment="Left" Margin="3,0,0,0" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Track" Property="Background" Value="{DynamicResource LxTintBrush}" />
+                            <Setter TargetName="Track" Property="BorderBrush" Value="Transparent" />
+                            <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                            <Setter TargetName="Thumb" Property="Margin" Value="0,0,3,0" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Track" Property="Opacity" Value="0.88" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
