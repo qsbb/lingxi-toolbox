@@ -5,6 +5,7 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <RootNamespace>LingXi.App</RootNamespace>
+    <!-- exe 内嵌 ico 与 SDK 资源器兼容性差，已裁剪：窗口/托盘/任务栏图标走 Assets/app.png 运行时图标 -->
   </PropertyGroup>
 
   <ItemGroup>
