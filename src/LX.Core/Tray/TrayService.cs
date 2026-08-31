@@ -23,6 +23,8 @@ public sealed class TrayService : ILxTray, IDisposable
     /// <summary>托盘图标是否真正注册到 Shell（ForceCreate 之后可查）。</summary>
     public bool IsCreated => _icon?.IsCreated ?? false;
 
+    private IntPtr _hIcon;
+
     public void Initialize(System.Windows.Media.ImageSource iconSource, string tooltip)
     {
         _icon = new TaskbarIcon
@@ -32,12 +34,17 @@ public sealed class TrayService : ILxTray, IDisposable
         };
         try
         {
-            // 首选原生 Icon 通道：绕开 H.GeneratedIcons 的 ImageSource→Icon 转换链
-            //（其声明的 System.Drawing.Common>=10.0 与 net8.0 运行时不符，转换可能静默失败）
-            var sri = Application.GetResourceStream(
-                new Uri("pack://application:,,,/LX.App;component/Assets/app.ico"))
-                ?? throw new InvalidOperationException("app.ico 资源缺失");
-            _icon.Icon = new System.Drawing.Icon(sri.Stream);
+            // PNG → Bitmap → GetHicon → Icon.FromHandle：
+            // 彻底绕开 ICO 文件（自制 ICO 帧表损坏导致空 hicon → 托盘注册成功但图标空白）。
+            // 尺寸取 SmallIconSize（DPI 感知），保证托盘渲染尺寸正确。
+            var sri = System.Windows.Application.GetResourceStream(
+                new Uri("pack://application:,,,/LX.App;component/Assets/app.png"))
+                ?? throw new InvalidOperationException("app.png 资源缺失");
+            using var img = System.Drawing.Image.FromStream(sri.Stream);
+            var size = System.Windows.Forms.SystemInformation.SmallIconSize;
+            using var scaled = new System.Drawing.Bitmap(img, size.Width <= 0 ? 32 : size.Width, size.Height <= 0 ? 32 : size.Height);
+            _hIcon = scaled.GetHicon();
+            _icon.Icon = System.Drawing.Icon.FromHandle(_hIcon);
         }
         catch
         {
@@ -131,5 +138,26 @@ public sealed class TrayService : ILxTray, IDisposable
         return item;
     }
 
-    public void Dispose() => _icon?.Dispose();
+    public void Dispose()
+    {
+        _icon?.Dispose();
+        if (_hIcon != IntPtr.Zero)
+        {
+            try
+            {
+                _ = PInvoke.DestroyIcon(_hIcon);
+            }
+            catch
+            {
+                // 清理失败不阻塞退出
+            }
+            _hIcon = IntPtr.Zero;
+        }
+    }
+
+    private static class PInvoke
+    {
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        internal static extern bool DestroyIcon(IntPtr hIcon);
+    }
 }
