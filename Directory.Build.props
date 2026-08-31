@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- 允许在非 Windows 上构建 WPF 目标（本地 Linux 构建/CI 校验用；运行仍在 Windows） -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+</Project>

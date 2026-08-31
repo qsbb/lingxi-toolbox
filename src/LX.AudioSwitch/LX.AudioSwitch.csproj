@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>LingXi.AudioSwitch</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LX.Module.Sdk\LX.Module.Sdk.csproj" />
+    <ProjectReference Include="..\LX.Core\LX.Core.csproj" />
+    <ProjectReference Include="..\LX.Ui\LX.Ui.csproj" />
+    <ProjectReference Include="..\LX.Audio.Core\LX.Audio.Core.csproj" />
+  </ItemGroup>
+
+</Project>

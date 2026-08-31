@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>LingXi.Monitor.Core</RootNamespace>
+    <!-- 领域内核零依赖（HttpListener 跨平台），可在 Linux CI 上直接跑单测 -->
+  </PropertyGroup>
+
+</Project>

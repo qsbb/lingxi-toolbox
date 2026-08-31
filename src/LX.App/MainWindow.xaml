@@ -1,0 +1,44 @@
+<ui:FluentWindow x:Class="LingXi.App.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="凌溪工具箱" Width="1100" Height="720" MinWidth="920" MinHeight="600"
+                 WindowStartupLocation="CenterScreen"
+                 ExtendsContentIntoTitleBar="True"
+                 FontFamily="Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Title="凌溪工具箱" />
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="224" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- L1 玻璃侧栏（控制层） -->
+            <Border Grid.Column="0" Margin="10,0,0,10" CornerRadius="16"
+                    Background="{DynamicResource LxGlassFillBrush}"
+                    BorderBrush="{DynamicResource LxGlassBorderBrush}"
+                    BorderThickness="1">
+                <DockPanel>
+                    <Button DockPanel.Dock="Bottom" Content="切换主题"
+                            Style="{StaticResource LxPillButton}"
+                            Margin="12,8" Click="ThemeToggle_Click" />
+                    <ListBox x:Name="NavList"
+                             Style="{StaticResource LxNavList}"
+                             SelectionChanged="NavList_SelectionChanged" />
+                </DockPanel>
+            </Border>
+
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                <ContentControl x:Name="ModuleHost" Margin="14,0,10,10" />
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>LingXi.App</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LX.Module.Sdk\LX.Module.Sdk.csproj" />
+    <ProjectReference Include="..\LX.Core\LX.Core.csproj" />
+    <ProjectReference Include="..\LX.Ui\LX.Ui.csproj" />
+    <ProjectReference Include="..\LX.AudioSwitch\LX.AudioSwitch.csproj" />
+    <ProjectReference Include="..\LX.Monitor\LX.Monitor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets/app.png" />
+  </ItemGroup>
+
+</Project>

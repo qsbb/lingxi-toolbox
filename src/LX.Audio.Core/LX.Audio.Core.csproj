@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>LingXi.Audio</RootNamespace>
+    <!-- 纯 COM 互操作，无 UI 依赖：net8.0 便于在 Linux CI 上跑契约测试（运行时仍需 Windows） -->
+  </PropertyGroup>
+
+</Project>

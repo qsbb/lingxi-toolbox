@@ -1,0 +1,71 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="clr-namespace:LingXi.Ui.Controls">
+
+    <!-- 自定义控件默认样式（ThemeInfo → 本程序集 Themes/Generic.xaml 自动加载） -->
+
+    <Style TargetType="{x:Type controls:LxGlassCard}">
+        <Setter Property="Background" Value="{DynamicResource LxGlassFillBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource LxGlassBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="16" />
+        <Setter Property="CornerRadius" Value="{DynamicResource LxRadiusCard}" />
+        <Setter Property="Effect" Value="{DynamicResource LxCardShadow}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type controls:LxGlassCard}">
+                    <Border x:Name="Root"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Effect="{TemplateBinding Effect}">
+                        <ContentPresenter Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource LxGlassFillHoverBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type controls:LxStatusPill}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type controls:LxStatusPill}">
+                    <Border x:Name="Root" CornerRadius="999" Padding="9,3"
+                            Background="{DynamicResource LxPillInfoBgBrush}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse x:Name="Dot" Width="7" Height="7" VerticalAlignment="Center"
+                                     Fill="{DynamicResource LxStatusInfoFgBrush}" />
+                            <TextBlock x:Name="Label" Text="{TemplateBinding Text}" FontSize="11"
+                                       Margin="6,0,0,0" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource LxStatusInfoFgBrush}" />
+                        </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Level" Value="Ok">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource LxPillOkBgBrush}" />
+                            <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource LxStatusOkFgBrush}" />
+                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource LxStatusOkFgBrush}" />
+                        </Trigger>
+                        <Trigger Property="Level" Value="Warn">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource LxPillWarnBgBrush}" />
+                            <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource LxStatusWarnFgBrush}" />
+                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource LxStatusWarnFgBrush}" />
+                        </Trigger>
+                        <Trigger Property="Level" Value="Bad">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource LxPillBadBgBrush}" />
+                            <Setter TargetName="Dot" Property="Fill" Value="{DynamicResource LxStatusBadFgBrush}" />
+                            <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource LxStatusBadFgBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

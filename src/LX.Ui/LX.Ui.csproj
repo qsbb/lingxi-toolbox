@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>LingXi.Ui</RootNamespace>
+    <!-- 设计系统零第三方依赖：令牌 + 自绘玻璃控件（WPF-UI 只进 LX.App） -->
+  </PropertyGroup>
+
+</Project>

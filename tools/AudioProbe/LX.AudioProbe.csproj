@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>LX.AudioProbe</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- Windows 侧音频功能验证：枚举 → 切换 → 回滚（在 lx 机器上 dotnet run 即可验证 COM 切换链路） -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LX.Audio.Core\LX.Audio.Core.csproj" />
+  </ItemGroup>
+
+</Project>

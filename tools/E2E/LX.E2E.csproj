@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>LX.E2E</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- 本地功能验证工具：真实 servermonitor agent → LX Hub 端到端（不进 sln / CI） -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LX.Monitor.Core\LX.Monitor.Core.csproj" />
+  </ItemGroup>
+
+</Project>

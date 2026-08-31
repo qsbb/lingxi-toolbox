@@ -1,0 +1,46 @@
+{
+  "v": 1,
+  "name": "lx-fixture",
+  "agent_ts": 1788168461125,
+  "os": {
+    "platform": "linux",
+    "distro": "Debian GNU/Linux",
+    "release": "12",
+    "arch": "x64",
+    "hostname": "def6f9392d21",
+    "uptime": 1382980.61
+  },
+  "cpu": {
+    "model": "Ryzen 7 9700X 8-Core Processor",
+    "cores": 16,
+    "usage": 9.8,
+    "temp": 63.1,
+    "power": null
+  },
+  "gpus": [],
+  "mem": {
+    "used": 13.8,
+    "total": 14.5,
+    "swapUsed": 6.3,
+    "swapTotal": 12
+  },
+  "net": {
+    "iface": "eth0",
+    "rxSec": null,
+    "txSec": null,
+    "rxTotal": 7.6,
+    "txTotal": 7.8
+  },
+  "disks": [
+    {
+      "mount": "/data/dsh",
+      "used": 102.1,
+      "total": 215.4
+    }
+  ],
+  "load": [
+    1.72,
+    1.76,
+    1.62
+  ]
+}
