@@ -69,7 +69,7 @@ public partial class App : Application
         };
         ApplicationThemeManager.Apply(
             _dark ? ApplicationTheme.Dark : ApplicationTheme.Light,
-            Wpf.Ui.Controls.WindowBackdropType.Mica);
+            Wpf.Ui.Controls.WindowBackdropType.None);
         LxThemeManager.Apply(_dark);
 
         // 托盘
@@ -168,7 +168,7 @@ public partial class App : Application
         _dark = !_dark;
         ApplicationThemeManager.Apply(
             _dark ? ApplicationTheme.Dark : ApplicationTheme.Light,
-            Wpf.Ui.Controls.WindowBackdropType.Mica);
+            Wpf.Ui.Controls.WindowBackdropType.None);
         LxThemeManager.Apply(_dark);
         var shell = _settings.Get<ShellSettings>("shell");
         shell.Theme = _dark ? "dark" : "light";

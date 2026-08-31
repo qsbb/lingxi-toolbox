@@ -6,6 +6,7 @@
                  WindowStartupLocation="CenterScreen"
                  ExtendsContentIntoTitleBar="True"
                  Background="{DynamicResource LxPageBgBrush}"
+                 WindowBackdropType="None"
                  FontFamily="Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI">
 
     <Grid>
