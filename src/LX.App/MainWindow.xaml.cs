@@ -31,14 +31,18 @@ public partial class MainWindow : FluentWindow
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Mica 窗体材质（Win11）；Win10 上 FluentWindow 自带降级
+        // Mica 窗体材质（Win11）；XAML 里的 LxPageBgBrush 是保底实体背景，
+        // 只有 backdrop 应用成功才透明化，避免 Mica 失败时整窗纯白（开发文档 15 章风险对策）
         try
         {
-            WindowBackdrop.ApplyBackdrop(this, WindowBackdropType.Mica);
+            if (WindowBackdrop.ApplyBackdrop(this, WindowBackdropType.Mica))
+            {
+                SetCurrentValue(BackgroundProperty, System.Windows.Media.Brushes.Transparent);
+            }
         }
         catch
         {
-            // 降级路径
+            // 降级：保留实体背景
         }
         try
         {

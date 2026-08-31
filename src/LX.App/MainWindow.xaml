@@ -5,6 +5,7 @@
                  Title="凌溪工具箱" Width="1100" Height="720" MinWidth="920" MinHeight="600"
                  WindowStartupLocation="CenterScreen"
                  ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource LxPageBgBrush}"
                  FontFamily="Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI">
 
     <Grid>
