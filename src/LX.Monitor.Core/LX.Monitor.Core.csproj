@@ -3,7 +3,13 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>LingXi.Monitor.Core</RootNamespace>
-    <!-- 领域内核零依赖（HttpListener 跨平台），可在 Linux CI 上直接跑单测 -->
+    <!-- 领域内核零依赖（HttpListener 跨平台），可在 Linux CI 上直接跑单测；
+         System.Management 仅在 Windows 有 WMI 实现，Linux 上调用全部走 catch 降级不崩 -->
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="8.0.1" />
+  </ItemGroup>
 
 </Project>

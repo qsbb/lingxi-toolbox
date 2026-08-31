@@ -22,7 +22,42 @@ public partial class DashboardViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasMachines;
 
+    [ObservableProperty]
+    private bool _hasReporters;
+
+    /// <summary>上报目标状态行（URL → 最近一次上报结果）。</summary>
+    public ObservableCollection<ReporterStatusVm> ReporterStatuses { get; } = [];
+
     public DashboardViewModel(SnapshotStore store) => _store = store;
+
+    /// <summary>上报成功回调（来自 SnapshotReporter.Reported）。</summary>
+    public void MarkReporterOk(string url, TimeSpan elapsed)
+    {
+        var existing = ReporterStatuses.FirstOrDefault(r => r.Url == url);
+        if (existing is null)
+        {
+            ReporterStatuses.Add(new ReporterStatusVm(url, true, elapsed));
+        }
+        else
+        {
+            existing.Update(true, elapsed);
+        }
+        HasReporters = true;
+    }
+
+    /// <summary>上报失败回调（UI 层可调用）。</summary>
+    public void MarkReporterFail(string url, string reason)
+    {
+        var existing = ReporterStatuses.FirstOrDefault(r => r.Url == url);
+        if (existing is null)
+        {
+            ReporterStatuses.Add(new ReporterStatusVm(url, false, null, reason));
+        }
+        else
+        {
+            existing.Update(false, null, reason);
+        }
+    }
 
     public void ApplySnapshot(SnapshotEnvelope envelope)
     {

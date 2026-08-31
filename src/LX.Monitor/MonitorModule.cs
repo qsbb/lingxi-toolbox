@@ -10,6 +10,7 @@ public sealed class MonitorModule : ILxToolModule
 {
     private ILxModuleContext _ctx = null!;
     private readonly SnapshotStore _store = new();
+    private readonly List<SnapshotReporter> _reporters = [];
     private LxHub? _hub;
     private AgentHost? _agent;
     private AlertEngine? _alerts;
@@ -92,6 +93,26 @@ public sealed class MonitorModule : ILxToolModule
             HubToken = settings.HubToken,
         };
 
+        // 上报端（双向监控）：把本机指标按 servermonitor 协议上报给各目标服务器
+        foreach (var target in settings.Reporters.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.Url)))
+        {
+            try
+            {
+                var reporter = new SnapshotReporter(target);
+                reporter.Log += msg => ctx.Log.Info(msg);
+                // 回调来自后台线程，Marshal 回 UI 线程再动 ObservableCollection
+                reporter.Reported += elapsed => Application.Current?.Dispatcher.BeginInvoke(
+                    (Action)(() => _vm?.MarkReporterOk(target.Url, elapsed)));
+                reporter.Start();
+                _reporters.Add(reporter);
+                ctx.Log.Info($"上报端已启动 → {target.Url}（间隔 {target.IntervalSec}s）");
+            }
+            catch (Exception ex)
+            {
+                ctx.Log.Error($"上报端启动失败 {target.Url}", ex);
+            }
+        }
+
         _sweepTimer = new System.Windows.Threading.DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(3),
@@ -131,6 +152,18 @@ public sealed class MonitorModule : ILxToolModule
     public void Shutdown()
     {
         _sweepTimer?.Stop();
+        foreach (var reporter in _reporters)
+        {
+            try
+            {
+                reporter.Dispose();
+            }
+            catch
+            {
+                // 清理失败不阻塞
+            }
+        }
+        _reporters.Clear();
         _agent?.Dispose();
         _hub?.Dispose();
     }

@@ -33,5 +33,8 @@ public sealed class MonitorSettings
 
     public string? ForwardToken { get; set; }
 
+    /// <summary>上报目标列表：本机指标按 servermonitor 协议上报给任意服务器（双向监控，开发文档 9.8）。</summary>
+    public List<ReporterTarget> Reporters { get; set; } = [];
+
     public AlertRules Alerts { get; set; } = new();
 }
