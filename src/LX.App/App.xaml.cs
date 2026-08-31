@@ -86,6 +86,11 @@ public partial class App : Application
                 new BitmapImage(new Uri("pack://application:,,,/LX.App;component/Assets/app.png")),
                 "凌溪工具箱");
             log.Info($"托盘注册结果 IsCreated={_tray.IsCreated}");
+            // 启动气泡：强制托盘图标短暂浮现到主托盘区（Win11 默认新图标进折叠区，
+            // 气泡是用户确认图标存在的最直接信号）
+            _ = Task.Delay(1500).ContinueWith(_ =>
+                Dispatcher.BeginInvoke((Action)(() =>
+                    _tray.ShowNotification("凌溪工具箱", "已在后台运行，点此气泡旁的图标可打开主窗口"))));
         }
         catch (Exception ex)
         {
@@ -103,8 +108,9 @@ public partial class App : Application
         services.AddSingleton<ILxHotkeys>(hotkeys);
         services.AddSingleton<ILxNotify>(notify);
         services.AddSingleton<UpdateService>();
-        services.AddTransient<ILxToolModule, AudioModule>();
+        // 注册顺序即导航顺序：监控为首页排第一，音频其后
         services.AddTransient<ILxToolModule, MonitorModule>();
+        services.AddTransient<ILxToolModule, AudioModule>();
         var provider = services.BuildServiceProvider();
 
         _mainWindow = new MainWindow(_settings);
@@ -142,9 +148,22 @@ public partial class App : Application
         _single.ActivateRequested += ShowShell;
 
         _mainWindow.Show();
+        // 启动导航：有 LastModule 恢复上次模块；首次启动（无记录）默认打开监控页。
+        // AddModule 已把导航首位的监控页选中，这里仅在目标不同（或首启无监控模块）时补导航，避免重复建视图。
+        string? target;
         if (!string.IsNullOrWhiteSpace(shell.LastModule))
         {
-            _mainWindow.NavigateTo(shell.LastModule);
+            target = shell.LastModule;
+        }
+        else
+        {
+            target = _modules.Any(m => m.Id == "lx.monitor")
+                ? "lx.monitor"
+                : _modules.FirstOrDefault()?.Id;
+        }
+        if (!string.IsNullOrWhiteSpace(target) && target != _mainWindow.CurrentModuleId)
+        {
+            _mainWindow.NavigateTo(target);
         }
     }
 

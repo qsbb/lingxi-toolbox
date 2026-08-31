@@ -19,6 +19,9 @@ public partial class MainWindow : FluentWindow
     /// <summary>退出前允许真正关闭；默认关窗 = 最小化到托盘。</summary>
     public bool AllowClose { get; set; }
 
+    /// <summary>当前导航到的模块 Id（启动导航去重用；未导航时为 null）。</summary>
+    public string? CurrentModuleId { get; private set; }
+
     public event Action? ThemeToggleRequested;
 
     public MainWindow(SettingsStore settings)
@@ -120,6 +123,7 @@ public partial class MainWindow : FluentWindow
         {
             return;
         }
+        CurrentModuleId = moduleId;
 
         try
         {

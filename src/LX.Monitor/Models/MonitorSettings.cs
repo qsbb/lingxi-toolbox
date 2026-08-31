@@ -7,6 +7,9 @@ public sealed class MonitorSettings
 {
     public int HubPort { get; set; } = 2536;
 
+    /// <summary>Hub 绑定全网卡（局域网 agent 可直连上报；无 URLACL 权限时自动回退仅本机）。</summary>
+    public bool BindLan { get; set; } = true;
+
     public string HubToken { get; set; } = "";
 
     public int OfflineTimeoutSec { get; set; } = 30;
@@ -35,6 +38,9 @@ public sealed class MonitorSettings
 
     /// <summary>上报目标列表：本机指标按 servermonitor 协议上报给任意服务器（双向监控，开发文档 9.8）。</summary>
     public List<ReporterTarget> Reporters { get; set; } = [];
+
+    /// <summary>机器本地档案（Name 唯一键；快照机器 ∪ 档案机器合并显示，见 DashboardViewModel）。</summary>
+    public List<MachineProfile> MachineProfiles { get; set; } = [];
 
     public AlertRules Alerts { get; set; } = new();
 }

@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Windows;
 using LingXi.Monitor.Core;
 using LingXi.Monitor.ViewModels;
@@ -9,6 +12,7 @@ namespace LingXi.Monitor;
 public sealed class MonitorModule : ILxToolModule
 {
     private ILxModuleContext _ctx = null!;
+    private Models.MonitorSettings _settings = null!;
     private readonly SnapshotStore _store = new();
     private readonly List<SnapshotReporter> _reporters = [];
     private LxHub? _hub;
@@ -29,6 +33,7 @@ public sealed class MonitorModule : ILxToolModule
     {
         _ctx = ctx;
         var settings = ctx.Settings.Get<Models.MonitorSettings>("lx.monitor");
+        _settings = settings;
 
         // 首次生成 Hub token（sm_ + 32hex，与官方规格一致）
         if (string.IsNullOrWhiteSpace(settings.HubToken))
@@ -40,6 +45,7 @@ public sealed class MonitorModule : ILxToolModule
         var options = new HubOptions
         {
             Port = settings.HubPort,
+            BindLan = settings.BindLan,
             Tokens = new HashSet<string>(StringComparer.Ordinal) { settings.HubToken },
             OfflineTimeout = TimeSpan.FromSeconds(Math.Max(5, settings.OfflineTimeoutSec)),
         };
@@ -87,11 +93,23 @@ public sealed class MonitorModule : ILxToolModule
             _agent.Start();
         }
 
-        _vm = new DashboardViewModel(_store)
+        // 引导卡地址：LAN 形式 report URL（第一个非回环 IPv4；端口取 Hub 实际端口，含顺延）
+        var lanReportUrl = $"http://{GetLanIpv4()}:{_hub.Port}/servermonitor/report";
+
+        _vm = new DashboardViewModel(
+            _store, _settings,
+            // 档案改动即时写回 settings（同 HubToken 首次生成的写法）
+            () => _ctx.Settings.Set("lx.monitor", _settings),
+            ctx.Log)
         {
             HubReportUrl = _hub.ReportUrl,
-            HubToken = settings.HubToken,
+            LanReportUrl = lanReportUrl,
+            HubToken = _settings.HubToken,
+            // 官方 agent 一行部署命令模板：仅 <机器名> 需替换，token/url 已填本机实际值
+            DeployCommand = $"node agent.mjs --name <机器名> --token {_settings.HubToken} --report-url {lanReportUrl}",
         };
+        _vm.Prompt = (title, current) =>
+            Views.InputBoxWindow.Show(title, "输入该机器的显示别名（留空恢复原名称）", current);
 
         // 上报端（双向监控）：把本机指标按 servermonitor 协议上报给各目标服务器
         foreach (var target in settings.Reporters.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.Url)))
@@ -148,6 +166,26 @@ public sealed class MonitorModule : ILxToolModule
 
     public System.Windows.FrameworkElement CreateMainView() =>
         new Views.DashboardView { DataContext = _vm };
+
+    /// <summary>第一个非回环 IPv4（Up 状态、非 Loopback 接口）；取不到或异常回退 127.0.0.1。</summary>
+    private static string GetLanIpv4()
+    {
+        try
+        {
+            var address = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(n => n.OperationalStatus == OperationalStatus.Up &&
+                            n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .SelectMany(n => n.GetIPProperties().UnicastAddresses)
+                .Select(a => a.Address)
+                .FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork &&
+                                     !IPAddress.IsLoopback(a));
+            return address?.ToString() ?? "127.0.0.1";
+        }
+        catch
+        {
+            return "127.0.0.1";
+        }
+    }
 
     public void Shutdown()
     {
