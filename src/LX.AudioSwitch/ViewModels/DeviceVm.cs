@@ -23,6 +23,18 @@ public partial class DeviceVm : ObservableObject
     [ObservableProperty]
     private bool _isCurrent;
 
+    /// <summary>方向分组（true=输出/Render，false=输入/Capture），由 Refresh 按端点实际归属刷新。</summary>
+    [ObservableProperty]
+    private bool _isOutput = true;
+
+    /// <summary>端点类型副标题（如「输出 · 扬声器」「输入 · 麦克风」）。</summary>
+    [ObservableProperty]
+    private string _endpointKindText = "输出 · 播放设备";
+
+    /// <summary>设备类型图标（Segoe Fluent Icons 字形，按设备名解析）。</summary>
+    [ObservableProperty]
+    private string _iconGlyph = "\uE767";
+
     public DeviceVm(string id, string displayName)
     {
         Id = id;

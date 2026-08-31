@@ -1,0 +1,152 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="clr-namespace:LingXi.Ui.Controls;assembly=LX.Ui">
+
+    <!--
+      凌溪·音频 模块私有样式（只由 AudioView.xaml 合并，不进入 LX.Ui 公共令牌库）。
+      铁律：
+      - 颜色/圆角一律 DynamicResource 引 Tokens.*.xaml 令牌，禁止硬编码色值；
+      - 设备卡样式不 BasedOn 也不自带模板，未设置的属性回落到 LX.Ui Generic.xaml 的
+        默认玻璃卡样式（Background/描边/CornerRadius/阴影），只按需覆盖；
+      - 玻璃只属于控制层（卡片/键帽/HUD 浮层），内容层保持实色。
+    -->
+
+    <!-- 当前设备卡光晕：ShadowDepth=0 的 tint 光晕替代投影，模拟 iOS 聚焦环 -->
+    <DropShadowEffect x:Key="LxActiveCardGlow" BlurRadius="22" ShadowDepth="0" Opacity="0.45"
+                      Color="{DynamicResource LxTintBlueColor}" />
+
+    <!-- ============ 设备卡：当前设备 tint 描边 + tint 玻璃填充 + 光晕 ============ -->
+    <Style x:Key="LxDeviceCard" TargetType="controls:LxGlassCard">
+        <Setter Property="Padding" Value="16" />
+        <Setter Property="Margin" Value="0,0,0,16" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource LxTintBrush}" />
+                <Setter Property="BorderThickness" Value="1.5" />
+                <Setter Property="Background" Value="{DynamicResource LxNavActiveBrush}" />
+                <Setter Property="Effect" Value="{StaticResource LxActiveCardGlow}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 切换成功瞬时高亮层：铺满卡内、IsCurrent 变 True 时 0.35→0 蓝色脉冲淡出 -->
+    <Style x:Key="LxCardFlashLayer" TargetType="Border">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="Background" Value="{DynamicResource LxTintBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource LxRadiusControl}" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                <DataTrigger.EnterActions>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.35" To="0" Duration="0:0:0.65">
+                            <DoubleAnimation.EasingFunction>
+                                <CubicEase EasingMode="EaseOut" />
+                            </DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
+                    </Storyboard>
+                </DataTrigger.EnterActions>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 当前设备对勾徽章（仅 IsCurrent=True 显示） -->
+    <Style x:Key="LxCurrentBadge" TargetType="Border">
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="CornerRadius" Value="{DynamicResource LxRadiusCapsule}" />
+        <Setter Property="Background" Value="{DynamicResource LxNavActiveBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource LxTintBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Visibility" Value="Collapsed" />
+        <Setter Property="ToolTip" Value="当前默认设备" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                <Setter Property="Visibility" Value="Visible" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 切换按钮：基于公共主胶囊按钮，当前设备整只隐藏（徽章接管右侧） -->
+    <Style x:Key="LxDeviceSwitchButton" TargetType="Button" BasedOn="{StaticResource LxAccentPillButton}">
+        <Setter Property="Padding" Value="16,7" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                <Setter Property="Visibility" Value="Collapsed" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ============ 分组小标题（LxCaption 风格）与数量徽章 ============ -->
+    <Style x:Key="LxGroupHeader" TargetType="TextBlock" BasedOn="{StaticResource LxCaption}">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="LxCountBadge" TargetType="Border">
+        <Setter Property="CornerRadius" Value="{DynamicResource LxRadiusCapsule}" />
+        <Setter Property="Background" Value="{DynamicResource LxNavActiveBrush}" />
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="LxCountBadgeText" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource LxTintBrush}" />
+    </Style>
+
+    <!-- ============ 键帽（kbd 风格小圆角玻璃块） ============ -->
+    <Style x:Key="LxKeyCap" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource LxGlassFillBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource LxGlassBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ============ HUD 浮层：切换成功提示（ShowSwitchHud 开关在 VM 内复用） ============ -->
+    <Style x:Key="LxSwitchHud" TargetType="Border">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Margin" Value="0,10,0,0" />
+        <Setter Property="CornerRadius" Value="{DynamicResource LxRadiusCapsule}" />
+        <Setter Property="Background" Value="{DynamicResource LxPillInfoBgBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource LxGlassBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="16,9" />
+        <Setter Property="Effect" Value="{DynamicResource LxCardShadow}" />
+        <Setter Property="RenderTransform">
+            <Setter.Value>
+                <TranslateTransform Y="-8" />
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsSwitchHudOpen}" Value="True">
+                <Setter Property="Opacity" Value="1" />
+                <DataTrigger.EnterActions>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.18" />
+                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                         From="-8" To="0" Duration="0:0:0.24">
+                            <DoubleAnimation.EasingFunction>
+                                <CubicEase EasingMode="EaseOut" />
+                            </DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
+                    </Storyboard>
+                </DataTrigger.EnterActions>
+                <DataTrigger.ExitActions>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.28" />
+                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                         To="-8" Duration="0:0:0.28" />
+                    </Storyboard>
+                </DataTrigger.ExitActions>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+</ResourceDictionary>

@@ -3,7 +3,96 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:LingXi.Ui.Controls;assembly=LX.Ui">
 
-    <!-- 音频快切主视图（开发文档 8.6） -->
+    <!--
+      音频快切主视图（开发文档 8.6 · iOS26 Liquid Glass 重设计）
+      铁律：颜色/圆角一律 DynamicResource 引 LX.Ui 令牌，禁止硬编码色值；
+      玻璃只属于控制层（卡片/键帽/HUD 浮层），内容层（分组标题/空态正文）保持实色。
+    -->
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- 模块私有样式：仅合并进本视图，不改 LX.Ui 公共库 -->
+                <ResourceDictionary Source="pack://application:,,,/LX.AudioSwitch;component/Themes/ModuleStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- 设备卡模板：输出/输入两组共用 -->
+            <DataTemplate x:Key="DeviceCardTemplate">
+                <controls:LxGlassCard Style="{StaticResource LxDeviceCard}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 设备类型大图标（Segoe Fluent Icons，MDL2 兜底） -->
+                        <Border Width="46" Height="46"
+                                CornerRadius="{DynamicResource LxRadiusControl}"
+                                Background="{DynamicResource LxNavActiveBrush}">
+                            <TextBlock Text="{Binding IconGlyph}"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontSize="20"
+                                       Foreground="{DynamicResource LxTintBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+
+                        <!-- 设备名（主）+ 状态徽章 + 端点类型副标题（次） -->
+                        <Grid Grid.Column="1" Margin="14,0,10,0" VerticalAlignment="Center">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding DisplayName}"
+                                           FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource LxTextPrimaryBrush}"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" />
+                                <controls:LxStatusPill Grid.Column="1" Text="{Binding StatusText}" Level="{Binding Level}"
+                                                       Margin="10,0,0,0" VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBlock Grid.Row="1" Text="{Binding EndpointKindText}"
+                                       Style="{StaticResource LxCaption}" Margin="0,3,0,0" />
+                        </Grid>
+
+                        <!-- 当前设备对勾徽章（仅当前设备显示，接管"切换"按钮的位置） -->
+                        <Border Grid.Column="2" Style="{StaticResource LxCurrentBadge}" Margin="0,0,12,0"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="&#xE73E;"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource LxTintBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+
+                        <!-- 切换按钮（仅非当前设备显示；已拔出设备置灰） -->
+                        <Button Grid.Column="3" Style="{StaticResource LxDeviceSwitchButton}"
+                                Content="切换" VerticalAlignment="Center"
+                                IsEnabled="{Binding IsAvailable}"
+                                Command="{Binding DataContext.SwitchCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding}" />
+
+                        <!-- 移除保存记录（ghost 图标钮，保留原有功能） -->
+                        <Button Grid.Column="4" Style="{StaticResource LxIconGhostButton}"
+                                Content="&#xE74D;" FontSize="13" Margin="6,0,0,0" VerticalAlignment="Center"
+                                ToolTip="移除已保存设备"
+                                Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                CommandParameter="{Binding}" />
+
+                        <!-- 切换成功瞬时高亮层：置于内容之上，蓝色脉冲淡出（动画在 LxCardFlashLayer） -->
+                        <Border Grid.ColumnSpan="5" Style="{StaticResource LxCardFlashLayer}" />
+                    </Grid>
+                </controls:LxGlassCard>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
 
     <Grid>
         <TextBlock x:Name="FallbackText"
@@ -12,8 +101,12 @@
                    FontSize="13" Visibility="Collapsed"
                    Foreground="{DynamicResource LxTextSecondaryBrush}" />
 
-        <ScrollViewer x:Name="MainScroll" VerticalScrollBarVisibility="Auto">
-            <Grid Margin="4,0,0,0">
+        <!-- 滚动区背景透明，玻璃质感全部由卡片自身承载 -->
+        <ScrollViewer x:Name="MainScroll" Background="Transparent"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      Padding="0,0,2,0">
+            <!-- 最大内容宽度 880：宽屏居中收拢，窄屏自然铺满（Stretch + MaxWidth = 超宽时居中） -->
+            <Grid MaxWidth="880" Margin="4,0,0,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -22,104 +115,176 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- 头部 -->
+                <!-- ===== 页头（与监控页同构：48 图标 chip + LxTitle + 副标题 + 主 CTA） ===== -->
                 <Grid Grid.Row="0" Margin="0,0,0,18">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="48" Height="48" CornerRadius="14"
+                    <Border Width="48" Height="48" CornerRadius="{DynamicResource LxRadiusControl}"
                             Background="{DynamicResource LxGlassFillBrush}"
                             BorderBrush="{DynamicResource LxGlassBorderBrush}" BorderThickness="1">
-                        <TextBlock Text="♫" FontSize="22"
+                        <TextBlock Text="&#xE767;"
+                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                   FontSize="20"
                                    Foreground="{DynamicResource LxTintBrush}"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
                         <TextBlock Text="凌溪·音频" Style="{StaticResource LxTitle}" />
-                        <TextBlock Text="快速切换音频输出设备" Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
+                        <TextBlock Text="输出 / 输入设备一键快切 · 托盘与全局热键轮播"
+                                   Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
                     </StackPanel>
                     <Button Grid.Column="2" Style="{StaticResource LxAccentPillButton}"
                             Content="＋ 添加设备" Command="{Binding AddCommand}"
                             VerticalAlignment="Center" />
                 </Grid>
 
-                <!-- 当前默认设备卡 -->
-                <controls:LxGlassCard Grid.Row="1" CornerRadius="{DynamicResource LxRadiusSheet}"
-                                      Padding="18,14" Margin="0,0,0,18">
+                <!-- ===== 输出设备分组 ===== -->
+                <StackPanel Grid.Row="1">
+                    <StackPanel Orientation="Horizontal" Margin="2,0,0,12">
+                        <TextBlock Text="输出设备" Style="{StaticResource LxGroupHeader}" VerticalAlignment="Center" />
+                        <Border Style="{StaticResource LxCountBadge}" Margin="8,0,0,0">
+                            <TextBlock Text="{Binding OutputCount}" Style="{StaticResource LxCountBadgeText}" />
+                        </Border>
+                    </StackPanel>
+
+                    <ItemsControl ItemsSource="{Binding OutputDevices}" ItemTemplate="{StaticResource DeviceCardTemplate}" />
+
+                    <!-- 空态：一组无设备时的优雅占位 -->
+                    <Border CornerRadius="{DynamicResource LxRadiusCard}" Margin="0,0,0,12" Padding="22,18"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource LxGlassBorderBrush}" BorderThickness="1">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasOutputDevices}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel>
+                            <TextBlock Text="&#xE767;"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontSize="22"
+                                       Foreground="{DynamicResource LxTextSecondaryBrush}"
+                                       HorizontalAlignment="Center" />
+                            <TextBlock Text="暂无已保存的输出设备" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource LxTextPrimaryBrush}"
+                                       Margin="0,8,0,0" HorizontalAlignment="Center" />
+                            <TextBlock Text="点击右上角「＋ 添加设备」保存常用播放设备，即可用热键循环与托盘快切"
+                                       Style="{StaticResource LxCaption}" Margin="0,4,0,0"
+                                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ===== 输入设备分组 ===== -->
+                <StackPanel Grid.Row="2" Margin="0,4,0,0">
+                    <StackPanel Orientation="Horizontal" Margin="2,0,0,12">
+                        <TextBlock Text="输入设备" Style="{StaticResource LxGroupHeader}" VerticalAlignment="Center" />
+                        <Border Style="{StaticResource LxCountBadge}" Margin="8,0,0,0">
+                            <TextBlock Text="{Binding InputCount}" Style="{StaticResource LxCountBadgeText}" />
+                        </Border>
+                    </StackPanel>
+
+                    <ItemsControl ItemsSource="{Binding InputDevices}" ItemTemplate="{StaticResource DeviceCardTemplate}" />
+
+                    <!-- 空态 -->
+                    <Border CornerRadius="{DynamicResource LxRadiusCard}" Margin="0,0,0,12" Padding="22,18"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource LxGlassBorderBrush}" BorderThickness="1">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasInputDevices}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel>
+                            <TextBlock Text="&#xE720;"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontSize="22"
+                                       Foreground="{DynamicResource LxTextSecondaryBrush}"
+                                       HorizontalAlignment="Center" />
+                            <TextBlock Text="暂无已保存的输入设备" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource LxTextPrimaryBrush}"
+                                       Margin="0,8,0,0" HorizontalAlignment="Center" />
+                            <TextBlock Text="已保存的麦克风设备会显示在这里，与输出设备共用同一套热键轮播"
+                                       Style="{StaticResource LxCaption}" Margin="0,4,0,0"
+                                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ===== 循环切换热键卡（kbd 键帽风格） ===== -->
+                <controls:LxGlassCard Grid.Row="3" CornerRadius="{DynamicResource LxRadiusSheet}"
+                                      Padding="18,16" Margin="0,4,0,16">
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Ellipse Width="10" Height="10" VerticalAlignment="Center"
-                                     Fill="{DynamicResource LxStatusOkFgBrush}" />
-                            <StackPanel Margin="12,0,0,0">
-                                <TextBlock Text="当前默认设备" Style="{StaticResource LxCaption}" />
-                                <TextBlock Text="{Binding CurrentDeviceName}" FontSize="15" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource LxTextPrimaryBrush}"
-                                           Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
-                        </StackPanel>
-                        <Border Grid.Column="1" Background="{DynamicResource LxGlassFillBrush}"
-                                CornerRadius="{DynamicResource LxRadiusCapsule}" Padding="11,6"
-                                VerticalAlignment="Center">
-                            <TextBlock Text="{Binding DeviceCountText}" FontSize="12"
-                                       Foreground="{DynamicResource LxTextSecondaryBrush}" />
+
+                        <Border Width="44" Height="44"
+                                CornerRadius="{DynamicResource LxRadiusControl}"
+                                Background="{DynamicResource LxGlassFillBrush}">
+                            <TextBlock Text="&#xE765;"
+                                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                       FontSize="19"
+                                       Foreground="{DynamicResource LxTintBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
+
+                        <StackPanel Grid.Column="1" Margin="14,0,10,0" VerticalAlignment="Center">
+                            <TextBlock Text="循环切换热键" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource LxTextPrimaryBrush}" />
+                            <ItemsControl ItemsSource="{Binding HotkeyKeys}" Margin="0,8,0,0"
+                                          HorizontalAlignment="Left">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource LxKeyCap}" Margin="0,0,6,0">
+                                            <TextBlock Text="{Binding}" FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource LxTextPrimaryBrush}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Text="按下热键在已保存设备间循环切换（自动跳过已拔出项）。可在 settings.json 的 lx.audioswitch.CycleHotkey 修改。"
+                                       Style="{StaticResource LxCaption}" />
+                        </StackPanel>
+
+                        <controls:LxStatusPill Grid.Column="2" Text="热键已启用" Level="Ok" VerticalAlignment="Center" />
                     </Grid>
                 </controls:LxGlassCard>
 
-                <TextBlock Grid.Row="2" Text="已保存设备" FontSize="15" FontWeight="SemiBold"
-                           Foreground="{DynamicResource LxTextPrimaryBrush}" Margin="2,0,0,12" />
-
-                <!-- 设备列表 -->
-                <ItemsControl Grid.Row="3" ItemsSource="{Binding Devices}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <controls:LxGlassCard Margin="0,0,0,10" Padding="14">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Width="40" Height="40" CornerRadius="20"
-                                            Background="{DynamicResource LxGlassFillBrush}">
-                                        <TextBlock Text="♫" FontSize="18"
-                                                   Foreground="{DynamicResource LxTintBrush}"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    </Border>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,10,0">
-                                        <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource LxTextPrimaryBrush}"
-                                                   TextTrimming="CharacterEllipsis" />
-                                        <controls:LxStatusPill Text="{Binding StatusText}" Level="{Binding Level}"
-                                                               Margin="0,6,0,0" HorizontalAlignment="Left" />
-                                    </StackPanel>
-                                    <Button Grid.Column="2" Style="{StaticResource LxAccentPillButton}"
-                                            Content="切换" Padding="16,7" VerticalAlignment="Center"
-                                            IsEnabled="{Binding IsAvailable}"
-                                            Command="{Binding DataContext.SwitchCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}" />
-                                    <Button Grid.Column="3" Style="{StaticResource LxIconGhostButton}"
-                                            Content="×" Margin="10,0,0,0" VerticalAlignment="Center"
-                                            ToolTip="移除已保存设备"
-                                            Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                            CommandParameter="{Binding}" />
-                                </Grid>
-                            </controls:LxGlassCard>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <TextBlock Grid.Row="4" Margin="2,8,0,0"
-                           Text="已拔出的设备会保留在列表中 · 点击 × 可删除保存记录 · Ctrl+Alt+A 循环切换"
-                           Style="{StaticResource LxCaption}" />
+                <!-- ===== 底部提示行 ===== -->
+                <TextBlock Grid.Row="4" Margin="2,0,0,4" Style="{StaticResource LxCaption}"
+                           Text="设备热插拔实时刷新 · 已拔出的设备保留记录（点右侧按钮删除）· 托盘右键菜单可不经主窗直接切换" />
             </Grid>
         </ScrollViewer>
+
+        <!-- ===== 切换成功 HUD（L1 浮层：渐显上浮，1.6s 后自动隐藏；开关复用 ShowSwitchHud 设置） ===== -->
+        <Border Style="{StaticResource LxSwitchHud}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#xE73E;"
+                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                           FontSize="13"
+                           Foreground="{DynamicResource LxStatusOkFgBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding SwitchHudText}" Margin="8,0,0,0" FontSize="13" FontWeight="SemiBold"
+                           Foreground="{DynamicResource LxTextPrimaryBrush}" VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>
