@@ -31,16 +31,10 @@ public partial class MainWindow : FluentWindow
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Mica 窗体材质仅做尝试：即使 API 返回成功也保留 LxPageBgBrush 实体背景
-        // （远程会话/驱动差异下 backdrop 可能返回 true 却不渲染 → 透明底全白，开发文档 15 章）
-        try
-        {
-            WindowBackdrop.ApplyBackdrop(this, WindowBackdropType.Mica);
-        }
-        catch
-        {
-            // 降级：实体背景兜底
-        }
+        // Mica/backdrop 已整体停用：WPF-UI 的 ApplyBackdrop 会在 Loaded 后接管窗口背景，
+        // 在部分环境（远程会话/驱动差异）下材质不渲染 → 窗口先渲染首帧再被刷成透明白。
+        // 玻璃质感改由 LxPageBgBrush 实体底 + LxGlassFillBrush 半透明控制层表达（开发文档 6.2）。
+        // 如需恢复：WindowBackdrop.ApplyBackdrop(this, WindowBackdropType.Mica);
         try
         {
             Icon = new System.Windows.Media.Imaging.BitmapImage(
