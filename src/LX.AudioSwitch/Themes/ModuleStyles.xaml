@@ -5,15 +5,18 @@
     <!--
       凌溪·音频 模块私有样式（只由 AudioView.xaml 合并，不进入 LX.Ui 公共令牌库）。
       铁律：
-      - 颜色/圆角一律 DynamicResource 引 Tokens.*.xaml 令牌，禁止硬编码色值；
+      - 颜色/圆角一律 DynamicResource 引 Tokens.*.xaml 令牌，禁止硬编码色值
+        （Effect/动画等 Freezable 例外：见下）；
       - 设备卡样式不 BasedOn 也不自带模板，未设置的属性回落到 LX.Ui Generic.xaml 的
         默认玻璃卡样式（Background/描边/CornerRadius/阴影），只按需覆盖；
       - 玻璃只属于控制层（卡片/键帽/HUD 浮层），内容层保持实色。
+      冻结陷阱（实机踩坑记录，勿回退）：
+      - 资源字典级共享 Freezable（DropShadowEffect 资源项）被 Style.Triggers 引用
+        会在 Seal 时触发"已冻结对象修改"异常 → Effect 一律内联在 Setter.Value；
+      - Style.Triggers 的 EnterActions/ExitActions Storyboard 在本环境同样触发
+        TriggerActionCollection 冻结异常 → 状态切换用 Setter 直切，
+        过渡动画由 VM 层 DispatcherTimer + Opacity 属性驱动。
     -->
-
-    <!-- 当前设备卡光晕：ShadowDepth=0 的 tint 光晕替代投影，模拟 iOS 聚焦环 -->
-    <DropShadowEffect x:Key="LxActiveCardGlow" BlurRadius="22" ShadowDepth="0" Opacity="0.45"
-                      Color="{DynamicResource LxTintBlueColor}" />
 
     <!-- ============ 设备卡：当前设备 tint 描边 + tint 玻璃填充 + 光晕 ============ -->
     <Style x:Key="LxDeviceCard" TargetType="controls:LxGlassCard">
@@ -24,30 +27,24 @@
                 <Setter Property="BorderBrush" Value="{DynamicResource LxTintBrush}" />
                 <Setter Property="BorderThickness" Value="1.5" />
                 <Setter Property="Background" Value="{DynamicResource LxNavActiveBrush}" />
-                <Setter Property="Effect" Value="{StaticResource LxActiveCardGlow}" />
+                <Setter Property="Effect">
+                    <Setter.Value>
+                        <!-- 内联 Effect（Freezable 不共享、不进资源字典，规避冻结冲突）；
+                             ShadowDepth=0 tint 光晕模拟 iOS 聚焦环 -->
+                        <DropShadowEffect BlurRadius="22" ShadowDepth="0" Opacity="0.45"
+                                          Color="{StaticResource LxTintBlueColor}" />
+                    </Setter.Value>
+                </Setter>
             </DataTrigger>
         </Style.Triggers>
     </Style>
 
-    <!-- 切换成功瞬时高亮层：铺满卡内、IsCurrent 变 True 时 0.35→0 蓝色脉冲淡出 -->
+    <!-- 切换成功瞬时高亮层：VM 驱动 Opacity（0.35 → 0），样式只负责静态属性 -->
     <Style x:Key="LxCardFlashLayer" TargetType="Border">
         <Setter Property="Opacity" Value="0" />
         <Setter Property="IsHitTestVisible" Value="False" />
         <Setter Property="Background" Value="{DynamicResource LxTintBrush}" />
         <Setter Property="CornerRadius" Value="{DynamicResource LxRadiusControl}" />
-        <Style.Triggers>
-            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
-                <DataTrigger.EnterActions>
-                    <Storyboard>
-                        <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.35" To="0" Duration="0:0:0.65">
-                            <DoubleAnimation.EasingFunction>
-                                <CubicEase EasingMode="EaseOut" />
-                            </DoubleAnimation.EasingFunction>
-                        </DoubleAnimation>
-                    </Storyboard>
-                </DataTrigger.EnterActions>
-            </DataTrigger>
-        </Style.Triggers>
     </Style>
 
     <!-- 当前设备对勾徽章（仅 IsCurrent=True 显示） -->
@@ -118,33 +115,26 @@
         <Setter Property="BorderBrush" Value="{DynamicResource LxGlassBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="16,9" />
-        <Setter Property="Effect" Value="{DynamicResource LxCardShadow}" />
-        <Setter Property="RenderTransform">
+        <Setter Property="Effect">
             <Setter.Value>
-                <TranslateTransform Y="-8" />
+                <!-- 内联阴影（参数同 LX.Ui 的 LxCardShadow；阴影色为中性色不随主题） -->
+                <DropShadowEffect BlurRadius="24" ShadowDepth="5" Direction="270" Opacity="0.12" Color="#53637D" />
             </Setter.Value>
         </Setter>
+        <Setter Property="RenderTransform">
+            <Setter.Value>
+                <TranslateTransform Y="0" />
+            </Setter.Value>
+        </Setter>
+        <!-- 显隐由 VM 属性直切（过渡动画由 VM 的 DispatcherTimer 驱动 Opacity） -->
         <Style.Triggers>
             <DataTrigger Binding="{Binding IsSwitchHudOpen}" Value="True">
                 <Setter Property="Opacity" Value="1" />
-                <DataTrigger.EnterActions>
-                    <Storyboard>
-                        <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.18" />
-                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                         From="-8" To="0" Duration="0:0:0.24">
-                            <DoubleAnimation.EasingFunction>
-                                <CubicEase EasingMode="EaseOut" />
-                            </DoubleAnimation.EasingFunction>
-                        </DoubleAnimation>
-                    </Storyboard>
-                </DataTrigger.EnterActions>
-                <DataTrigger.ExitActions>
-                    <Storyboard>
-                        <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.28" />
-                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                         To="-8" Duration="0:0:0.28" />
-                    </Storyboard>
-                </DataTrigger.ExitActions>
+                <Setter Property="RenderTransform">
+                    <Setter.Value>
+                        <TranslateTransform Y="0" />
+                    </Setter.Value>
+                </Setter>
             </DataTrigger>
         </Style.Triggers>
     </Style>

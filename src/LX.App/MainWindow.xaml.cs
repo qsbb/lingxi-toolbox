@@ -131,10 +131,20 @@ public partial class MainWindow : FluentWindow
         }
         catch (Exception ex)
         {
+            // 完整异常链落日志 + 显示（内层异常才是 XAML 资源问题根因）
+            try
+            {
+                Serilog.Log.Error(ex, "模块 {ModuleId} 视图创建失败", moduleId);
+            }
+            catch
+            {
+                // 日志失败不影响降级 UI
+            }
             ModuleHost.Content = new System.Windows.Controls.TextBlock
             {
-                Text = $"模块 {module.DisplayName} 加载失败：{ex.Message}",
+                Text = $"模块 {module.DisplayName} 加载失败：{ex.Message}\n\n内层：{ex.InnerException?.Message}\n\n再内层：{ex.InnerException?.InnerException?.Message}",
                 Margin = new Thickness(20),
+                TextWrapping = System.Windows.TextWrapping.Wrap,
                 Foreground = (Brush)FindResource("LxTextPrimaryBrush"),
             };
         }
