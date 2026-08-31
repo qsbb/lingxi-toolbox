@@ -29,6 +29,21 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // 全局异常钩子：记录后尽量存活（开发文档 10.3 健壮性）
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Serilog.Log.Error(args.Exception, "UI 线程未处理异常");
+            args.Handled = true;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            Serilog.Log.Error(args.ExceptionObject as Exception ?? new Exception(args.ExceptionObject?.ToString()),
+                "非 UI 线程未处理异常");
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Serilog.Log.Error(args.Exception, "未观察的任务异常");
+            args.SetObserved();
+        };
+
         // Velopack 更新钩子（未打包运行时为无害 no-op）
         global::Velopack.VelopackApp.Build().Run();
 
