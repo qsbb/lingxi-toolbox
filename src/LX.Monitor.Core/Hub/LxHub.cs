@@ -39,17 +39,26 @@ public sealed class LxHub : IDisposable
 
     public string ReportUrl => $"http://127.0.0.1:{Port}/servermonitor/report";
 
-    /// <summary>启动监听；端口被占用自动顺延（最多尝试 4 个端口）。</summary>
+    /// <summary>启动监听；端口被占用自动顺延（最多尝试 4 个端口）。
+    /// BindLan 时优先绑定全网卡（局域网 agent 可直连）；无 URLACL 权限自动回退仅本机。</summary>
     public void Start()
     {
+        var lan = _options.BindLan;
         for (var attempt = 0; ; attempt++)
         {
             _listener = new HttpListener();
-            _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
+            _listener.Prefixes.Add(lan ? $"http://+:{Port}/" : $"http://127.0.0.1:{Port}/");
             try
             {
                 _listener.Start();
                 break;
+            }
+            catch (HttpListenerException ex) when (lan && ex.ErrorCode == 5)
+            {
+                // 通配符前缀需要 URLACL：管理员执行一次
+                // netsh http add urlacl url=http://+:{Port}/ user=Everyone
+                Log?.Invoke($"全网卡绑定被拒（管理员执行 netsh http add urlacl url=http://+:{Port}/ user=Everyone 可解锁局域网上报），回退仅本机监听");
+                lan = false;
             }
             catch (HttpListenerException) when (attempt < 3)
             {
@@ -60,7 +69,9 @@ public sealed class LxHub : IDisposable
 
         _cts = new CancellationTokenSource();
         _ = Task.Run(() => AcceptLoopAsync(_cts.Token));
-        Log?.Invoke($"LX Hub 已启动：{ReportUrl}");
+        Log?.Invoke(lan
+            ? $"LX Hub 已启动：http://<本机IP>:{Port}/servermonitor/report（局域网可上报）"
+            : $"LX Hub 已启动：{ReportUrl}");
     }
 
     private async Task AcceptLoopAsync(CancellationToken token)
