@@ -8,7 +8,8 @@ namespace LingXi.Core.Tray;
 /// <summary>
 /// 托盘服务（H.NotifyIcon 包装，开发文档 7.3）：
 /// - 菜单 = 壳固有项（打开/退出…） + 各模块 SetMenu 段落合并；
-/// - 左键单击 → OpenRequested（壳订阅后显示主窗口）。
+/// - 左键单击 → OpenRequested（壳订阅后显示主窗口）；
+/// - 图标经 TrayIcon（原生 System.Drawing.Icon）通道注册，绕开跨版本转换链。
 /// </summary>
 public sealed class TrayService : ILxTray, IDisposable
 {
@@ -19,15 +20,30 @@ public sealed class TrayService : ILxTray, IDisposable
     /// <summary>左键单击托盘图标。</summary>
     public event Action? OpenRequested;
 
+    /// <summary>托盘图标是否真正注册到 Shell（ForceCreate 之后可查）。</summary>
+    public bool IsCreated => _icon?.IsCreated ?? false;
+
     public void Initialize(System.Windows.Media.ImageSource iconSource, string tooltip)
     {
         _icon = new TaskbarIcon
         {
-            IconSource = iconSource,
             ToolTipText = tooltip,
             Visibility = Visibility.Visible,
         };
-        // 显式创建 Shell_NotifyIcon 条目（H.NotifyIcon 默认延迟创建，部分环境不触发）
+        try
+        {
+            // 首选原生 Icon 通道：绕开 H.GeneratedIcons 的 ImageSource→Icon 转换链
+            //（其声明的 System.Drawing.Common>=10.0 与 net8.0 运行时不符，转换可能静默失败）
+            var sri = Application.GetResourceStream(
+                new Uri("pack://application:,,,/LX.App;component/Assets/app.ico"))
+                ?? throw new InvalidOperationException("app.ico 资源缺失");
+            _icon.Icon = new System.Drawing.Icon(sri.Stream);
+        }
+        catch
+        {
+            // 回退到 ImageSource 通道
+            _icon.IconSource = iconSource;
+        }
         _icon.ForceCreate();
         _icon.TrayLeftMouseDown += (_, _) => OpenRequested?.Invoke();
     }

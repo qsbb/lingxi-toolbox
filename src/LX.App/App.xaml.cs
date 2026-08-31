@@ -79,7 +79,7 @@ public partial class App : Application
             _tray.Initialize(
                 new BitmapImage(new Uri("pack://application:,,,/LX.App;component/Assets/app.png")),
                 "凌溪工具箱");
-            log.Info("托盘图标已创建");
+            log.Info($"托盘注册结果 IsCreated={_tray.IsCreated}");
         }
         catch (Exception ex)
         {
