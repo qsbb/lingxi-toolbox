@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Controls;
 using H.NotifyIcon;
 using LingXi.Sdk;
@@ -24,7 +25,10 @@ public sealed class TrayService : ILxTray, IDisposable
         {
             IconSource = iconSource,
             ToolTipText = tooltip,
+            Visibility = Visibility.Visible,
         };
+        // 显式创建 Shell_NotifyIcon 条目（H.NotifyIcon 默认延迟创建，部分环境不触发）
+        _icon.ForceCreate();
         _icon.TrayLeftMouseDown += (_, _) => OpenRequested?.Invoke();
     }
 

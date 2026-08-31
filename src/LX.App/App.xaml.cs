@@ -56,6 +56,7 @@ public partial class App : Application
 
         // 日志 + 设置
         var fileLogger = LxLog.CreateFileLogger();
+        ILxLog log = new LxLog(fileLogger);
         _settings = new SettingsStore();
         var shell = _settings.Get<ShellSettings>("shell");
 
@@ -73,13 +74,20 @@ public partial class App : Application
 
         // 托盘
         _tray = new TrayService();
-        _tray.Initialize(
-            new BitmapImage(new Uri("pack://application:,,,/LX.App;component/Assets/app.png")),
-            "凌溪工具箱");
+        try
+        {
+            _tray.Initialize(
+                new BitmapImage(new Uri("pack://application:,,,/LX.App;component/Assets/app.png")),
+                "凌溪工具箱");
+            log.Info("托盘图标已创建");
+        }
+        catch (Exception ex)
+        {
+            log.Error("托盘图标创建失败", ex);
+        }
         _tray.OpenRequested += ShowShell;
 
         // 组合根（开发文档 7 章：平台服务经接口注入）
-        ILxLog log = new LxLog(fileLogger);
         ILxNotify notify = new NotifyService(_tray);
         ILxHotkeys hotkeys = new HotkeyService();
         var services = new ServiceCollection();
