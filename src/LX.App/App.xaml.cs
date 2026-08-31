@@ -44,6 +44,12 @@ public partial class App : Application
             args.SetObserved();
         };
 
+        // 软件渲染：GameViewer 等虚拟显示适配器上 milcore/D3D 合成会静默失败
+        //（实证：UI 线程正常、hwnd 有效、UIA 子树 nodes=0、窗口纯白）。
+        // 工具箱为低帧率 UI，软件渲染无感知差异（开发文档 15 章兼容性对策）。
+        System.Windows.Media.RenderOptions.ProcessRenderMode =
+            System.Windows.Interop.RenderMode.SoftwareOnly;
+
         // Velopack 更新钩子（未打包运行时为无害 no-op）
         global::Velopack.VelopackApp.Build().Run();
 
