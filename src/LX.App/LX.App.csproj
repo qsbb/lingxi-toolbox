@@ -5,7 +5,11 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <RootNamespace>LingXi.App</RootNamespace>
-    <!-- exe 内嵌 ico 与 SDK 资源器兼容性差，已裁剪：窗口/托盘/任务栏图标走 Assets/app.png 运行时图标 -->
+    <!-- 多尺寸 BMP 帧 ICO（16/32/48/256，帧表已修复）——资源管理器/任务栏/托盘统一 logo -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- 单文件发布：依赖打进 exe，安装目录只有一个文件（.NET 8 框架由系统共享） -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
