@@ -13,10 +13,23 @@ public partial class MachineDetailWindow : Window
 {
     private static MachineDetailWindow? _active;
 
+    private DateTime _bornAt;
+
     private MachineDetailWindow()
     {
         InitializeComponent();
         Closed += (_, _) => _active = null;
+        Loaded += (_, _) => _bornAt = DateTime.UtcNow;
+    }
+
+    /// <summary>点窗外空白 = 关闭（300ms 诞生保护期内忽略焦点抖动）。非模态浏览窗适用。</summary>
+    protected override void OnDeactivated(EventArgs e)
+    {
+        base.OnDeactivated(e);
+        if ((DateTime.UtcNow - _bornAt).TotalMilliseconds > 300)
+        {
+            Close();
+        }
     }
 
     /// <summary>非模态弹出（同窗口复用换卡）；Owner 取当前活动窗口或主窗口。</summary>
