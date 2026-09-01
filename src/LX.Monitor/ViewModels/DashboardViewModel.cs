@@ -13,7 +13,9 @@ namespace LingXi.Monitor.ViewModels;
 /// 监控仪表盘 VM（开发文档 9.5 + 机器列表管理）：
 /// - 订阅快照表，机器卡片差量更新；
 /// - 快照机器 ∪ 档案机器（MachineProfile）合并显示；排序：置顶 → 有快照按名 → 未上报在后；
-/// - 档案改动（别名/置顶/隐藏）即时写回 settings 并刷新。
+/// - 档案改动（别名/置顶/隐藏）即时写回 settings 并刷新；
+/// - 信息架构改版：页面只留机器状态列表，添加机器 / 上报目标管理 / 机器详情收进悬浮窗
+///   （入口命令 → 模块层委托 → MachineDetailWindow / AddMachineWindow / ReporterManagerWindow）。
 /// </summary>
 public partial class DashboardViewModel : ObservableObject
 {
@@ -33,7 +35,7 @@ public partial class DashboardViewModel : ObservableObject
     [ObservableProperty]
     private string _hubReportUrl = "";
 
-    /// <summary>本机 LAN IP 形式的 report URL（添加机器引导卡用）。</summary>
+    /// <summary>本机 LAN IP 形式的 report URL（添加机器悬浮窗用）。</summary>
     [ObservableProperty]
     private string _lanReportUrl = "";
 
@@ -54,12 +56,6 @@ public partial class DashboardViewModel : ObservableObject
     private bool _hasHiddenMachines;
 
     [ObservableProperty]
-    private bool _guideExpanded;
-
-    [ObservableProperty]
-    private string _guideToggleText = "展开 ▾";
-
-    [ObservableProperty]
     private bool _hiddenExpanded;
 
     [ObservableProperty]
@@ -73,6 +69,15 @@ public partial class DashboardViewModel : ObservableObject
 
     /// <summary>上报目标编辑对话框：入参 null=新增（内部克隆展示），返回编辑结果或 null=取消；由模块层接入 ReporterEditorWindow。</summary>
     public Func<ReporterTarget?, ReporterTarget?>? EditReporter { get; set; }
+
+    /// <summary>打开机器详情悬浮窗（模块层接入 MachineDetailWindow；DataContext=MachineCardVm 实时刷新）。</summary>
+    public Action<MachineCardVm>? ShowMachineDetailWindow { get; set; }
+
+    /// <summary>打开"添加机器"悬浮窗（模块层接入 AddMachineWindow；agent 接入信息 + 上报目标摘要）。</summary>
+    public Action? ShowAddMachineWindow { get; set; }
+
+    /// <summary>打开上报目标管理悬浮窗（模块层接入 ReporterManagerWindow；原仪表盘平铺卡迁入）。</summary>
+    public Action? ShowReporterManagerWindow { get; set; }
 
     /// <summary>上报目标可视化管理行（与 settings.Reporters 源对象一一对应）。</summary>
     public ObservableCollection<ReporterTargetVm> ReporterTargets { get; } = [];
@@ -102,10 +107,6 @@ public partial class DashboardViewModel : ObservableObject
                 _log.Warn($"机器档案存在重复 Name，已忽略后项：{key}");
             }
         }
-
-        // 无档案机器时引导卡默认展开（首次使用引导）
-        GuideExpanded = _profiles.Count == 0;
-        GuideToggleText = GuideExpanded ? "收起 ▴" : "展开 ▾";
 
         // 档案机器先建卡（快照为空 → 未上报态）；后续快照到达经 ApplySnapshot 补数据
         foreach (var name in _profiles.Keys)
@@ -178,6 +179,10 @@ public partial class DashboardViewModel : ObservableObject
         {
             card.OsText = string.Join(" · ", new[] { os.Distro ?? os.Platform, os.Arch }
                 .Where(x => !string.IsNullOrWhiteSpace(x)));
+            card.PlatformText = string.Join(" · ", new[] { os.Distro ?? os.Platform, os.Release, os.Arch }
+                .Where(x => !string.IsNullOrWhiteSpace(x)));
+            card.HostText = string.IsNullOrWhiteSpace(os.Hostname) ? "—" : os.Hostname;
+            card.UptimeText = FormatUptime(os.Uptime);
         }
 
         if (snapshot.Cpu is { } cpu)
@@ -185,6 +190,7 @@ public partial class DashboardViewModel : ObservableObject
             card.CpuUsage = Math.Clamp(cpu.Usage ?? 0, 0, 100);
             card.CpuText = cpu.Usage is { } usage ? $"{usage:F0}%" : "—";
             card.TempText = cpu.Temp is { } temp ? $"CPU {temp:F0}℃" : "";
+            card.CpuTempText = cpu.Temp is { } t ? $"{t:F0}℃" : "—";
         }
 
         if (snapshot.Mem is { } mem && mem.Total is { } total && total > 0)
@@ -199,6 +205,7 @@ public partial class DashboardViewModel : ObservableObject
             var down = net.RxSec is { } rx ? $"↓ {rx:F1} MiB/s" : null;
             var up = net.TxSec is { } tx ? $"↑ {tx:F1} MiB/s" : null;
             card.NetText = string.Join("   ", new[] { down, up }.Where(x => x is not null));
+            card.ReplaceNet(net);
         }
 
         if (snapshot.Disks is { Count: > 0 })
@@ -211,6 +218,7 @@ public partial class DashboardViewModel : ObservableObject
             {
                 card.DiskText = $"磁盘 {disk.Mount}: {(disk.Used ?? 0):F0}/{diskTotal:F0} GiB";
             }
+            card.ReplaceDisks(snapshot.Disks);
         }
 
         card.LastSeenText = $"最后上报 {envelope.ReceivedAt:HH:mm:ss}";
@@ -235,13 +243,46 @@ public partial class DashboardViewModel : ObservableObject
         }
     }
 
-    // ============ 命令：引导卡 / 剪贴板 ============
+    // ============ 命令：悬浮窗入口 / 剪贴板 ============
 
+    /// <summary>卡片 ⋮ → 显示详情：打开 MachineDetailWindow（模块层委托）。</summary>
     [RelayCommand]
-    private void ToggleGuide()
+    private void ShowMachineDetail(MachineCardVm? card)
     {
-        GuideExpanded = !GuideExpanded;
-        GuideToggleText = GuideExpanded ? "收起 ▴" : "展开 ▾";
+        if (card is null)
+        {
+            return;
+        }
+        if (ShowMachineDetailWindow is null)
+        {
+            _log.Warn("机器详情悬浮窗未接入，忽略操作");
+            return;
+        }
+        ShowMachineDetailWindow.Invoke(card);
+    }
+
+    /// <summary>机器状态标题行 "+ 添加机器"：打开 AddMachineWindow（模块层委托）。</summary>
+    [RelayCommand]
+    private void OpenAddMachine()
+    {
+        if (ShowAddMachineWindow is null)
+        {
+            _log.Warn("添加机器悬浮窗未接入，忽略操作");
+            return;
+        }
+        ShowAddMachineWindow.Invoke();
+    }
+
+    /// <summary>打开上报目标管理悬浮窗（机器详情 / 添加机器的二级入口；模块层委托）。</summary>
+    [RelayCommand]
+    private void OpenReporterManager()
+    {
+        if (ShowReporterManagerWindow is null)
+        {
+            _log.Warn("上报目标管理悬浮窗未接入，忽略操作");
+            return;
+        }
+        ShowReporterManagerWindow.Invoke();
     }
 
     [RelayCommand]
@@ -343,6 +384,27 @@ public partial class DashboardViewModel : ObservableObject
         }
         ReorderMachines();
         SaveAndLog($"恢复显示机器 {card.Name}");
+    }
+
+    /// <summary>删除档案机器（⋮ 菜单仅对未上报过的档案机器显示：上报过的删了会随下一包快照回来，走"隐藏"）。</summary>
+    [RelayCommand]
+    private void DeleteMachine(MachineCardVm? card)
+    {
+        if (card is null || card.HasEverReported)
+        {
+            return;
+        }
+        _profiles.Remove(card.Name);
+        var profile = _settings.MachineProfiles.FirstOrDefault(p => p.Name == card.Name);
+        if (profile is not null)
+        {
+            _settings.MachineProfiles.Remove(profile);
+        }
+        _byName.Remove(card.Name);
+        Machines.Remove(card);
+        HiddenMachines.Remove(card);
+        UpdateFlags();
+        SaveAndLog($"删除档案机器 {card.Name}");
     }
 
     // ============ 命令：上报目标管理（双向监控） ============
@@ -459,6 +521,29 @@ public partial class DashboardViewModel : ObservableObject
         TimeoutMs = t.TimeoutMs,
     };
 
+    /// <summary>快照 uptime（秒）→ 上线时长文案（详情悬浮窗概要）。</summary>
+    private static string FormatUptime(double? seconds)
+    {
+        if (seconds is not { } s || s <= 0)
+        {
+            return "—";
+        }
+        var up = TimeSpan.FromSeconds(s);
+        if (up.TotalDays >= 1)
+        {
+            return $"{up.TotalDays:F0} 天 {up.Hours} 小时";
+        }
+        if (up.TotalHours >= 1)
+        {
+            return $"{up.TotalHours:F0} 小时 {up.Minutes} 分";
+        }
+        if (up.TotalMinutes >= 1)
+        {
+            return $"{up.TotalMinutes:F0} 分钟";
+        }
+        return $"{up.Seconds} 秒";
+    }
+
     // ============ 内部：卡片构建 / 排序 / 档案 ============
 
     private MachineProfile? Profile(string name) =>
@@ -486,6 +571,8 @@ public partial class DashboardViewModel : ObservableObject
         var profile = Profile(name);
         card.Alias = profile?.Alias ?? "";
         card.IsPinned = profile?.Pinned == true;
+        // 是否本机：上报目标上报的是"本机"指标，详情悬浮窗据此显示"上报设置…"入口
+        card.IsLocal = string.Equals(name, Environment.MachineName, StringComparison.OrdinalIgnoreCase);
         if (_store.Get(name) is null)
         {
             card.SetNotReported();

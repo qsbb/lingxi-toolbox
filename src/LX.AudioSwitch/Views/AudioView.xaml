@@ -154,7 +154,7 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
-                        <TextBlock Text="凌溪·音频" Style="{StaticResource LxTitle}" />
+                        <TextBlock Text="音频设备切换" Style="{StaticResource LxTitle}" />
                         <TextBlock Text="输出 / 输入设备一键快切 · 托盘与全局热键轮播"
                                    Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
                     </StackPanel>

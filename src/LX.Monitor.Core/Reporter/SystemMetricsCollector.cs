@@ -287,6 +287,79 @@ public sealed class SystemMetricsCollector
         {
             // 降级
         }
+
+        // GPU 占用率：Windows 10+ 通用方案（不挑厂商）——
+        // "GPU Engine" 性能计数器按引擎分片，聚合成每卡最大引擎占用率
+        //（对齐 servermonitor《Windows-GPU占用率修复说明》的扩展方向）。
+        var usageByGpu = QueryGpuEngineUsage();
+        if (usageByGpu.Count > 0)
+        {
+            var usages = usageByGpu.Values.ToList();
+            if (result.Count == 1)
+            {
+                result[0].Usage = usages.Max();
+            }
+            else
+            {
+                // 多卡：按 phys_N 序号对齐 WMI 列表顺序
+                for (var i = 0; i < result.Count; i++)
+                {
+                    if (usageByGpu.TryGetValue(i.ToString(), out var u))
+                    {
+                        result[i].Usage = u;
+                    }
+                }
+            }
+        }
         return result;
+    }
+
+    /// <summary>
+    /// GPU 引擎占用率采集（Windows 10+ "GPU Engine" 计数器族）：
+    /// 每个物理 GPU 在实例名 "phys_N_eng_..." 下挂多个引擎（3D/Copy/VideoDecode…），
+    /// 取每卡全部引擎 Utilization Percentage 的最大值作为该卡占用率。
+    /// 计数器缺失（旧系统/无权限）返回空字典，调用方保持 usage=null 不伪造。
+    /// </summary>
+    private static Dictionary<string, double> QueryGpuEngineUsage()
+    {
+        var byGpu = new Dictionary<string, double>();
+        try
+        {
+            var category = new PerformanceCounterCategory("GPU Engine");
+            foreach (var instance in category.GetInstanceNames())
+            {
+                var marker = "phys_";
+                var idx = instance.IndexOf(marker, StringComparison.Ordinal);
+                if (idx < 0)
+                {
+                    continue;
+                }
+                var rest = instance[(idx + marker.Length)..];
+                var gpuId = rest.Contains('_') ? rest[..rest.IndexOf('_')] : rest;
+
+                using var counter = new PerformanceCounter("GPU Engine", "Utilization Percentage", instance, readOnly: true);
+                var value = Math.Round(counter.NextValue(), 1);
+                if (value <= 0)
+                {
+                    continue;
+                }
+                if (byGpu.TryGetValue(gpuId, out var current))
+                {
+                    if (value > current)
+                    {
+                        byGpu[gpuId] = value;
+                    }
+                }
+                else
+                {
+                    byGpu[gpuId] = value;
+                }
+            }
+        }
+        catch
+        {
+            // 计数器不可用 → 保持空，不伪造
+        }
+        return byGpu;
     }
 }

@@ -3,7 +3,7 @@
                     xmlns:controls="clr-namespace:LingXi.Ui.Controls;assembly=LX.Ui">
 
     <!--
-      凌溪·音频 模块私有样式（只由 AudioView.xaml 合并，不进入 LX.Ui 公共令牌库）。
+      音频设备切换模块私有样式（只由 AudioView.xaml 合并，不进入 LX.Ui 公共令牌库）。
       铁律：
       - 颜色/圆角一律 DynamicResource 引 Tokens.*.xaml 令牌，禁止硬编码色值
         （Effect/动画等 Freezable 例外：见下）；

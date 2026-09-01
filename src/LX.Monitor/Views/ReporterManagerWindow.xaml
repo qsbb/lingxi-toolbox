@@ -1,0 +1,137 @@
+<Window x:Class="LingXi.Monitor.Views.ReporterManagerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:LingXi.Ui.Controls;assembly=LX.Ui"
+        Title="上报目标管理" Width="620" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False" WindowStyle="None" AllowsTransparency="True"
+        Background="Transparent" PreviewKeyDown="Window_PreviewKeyDown"
+        FontFamily="Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI">
+
+    <!--
+      上报目标管理悬浮窗（原仪表盘平铺卡迁入；入口：机器详情"上报设置…" / 添加机器窗"管理上报目标…"）。
+      自绘玻璃 Sheet；目标列表 + 增删改 + 启停 + 最近上报状态，命令全部复用 DashboardViewModel。
+      嵌套滚动铁律：全窗仅这一个 ScrollViewer。
+    -->
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- 模块内 iOS 风格拨动开关样式（不动 LX.Ui 公共文件） -->
+                <ResourceDictionary Source="pack://application:,,,/LX.Monitor;component/Themes/ToggleSwitch.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <!-- 玻璃 Sheet：阴影 Effect 按冻结陷阱内联在 Setter.Value，不做共享资源引用 -->
+    <Border x:Name="Sheet" Margin="18"
+            CornerRadius="{DynamicResource LxRadiusSheet}"
+            Background="{DynamicResource LxPageBgBrush}"
+            BorderBrush="{DynamicResource LxGlassBorderBrush}" BorderThickness="1">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Setter Property="Effect">
+                    <Setter.Value>
+                        <DropShadowEffect BlurRadius="26" ShadowDepth="6" Direction="270" Opacity="0.18" Color="#53637D" />
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </Border.Style>
+
+        <ScrollViewer MaxHeight="560" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="22,16">
+
+                <!-- 标题行 + 添加目标 + 关闭（Path 自绘，避开 Segoe 字形豆腐块） -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="上报目标管理" FontSize="18" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource LxTextPrimaryBrush}" />
+                        <TextBlock Text="本机指标按 servermonitor 协议上报给以下服务器（双向监控）"
+                                   Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Content="添加目标" Style="{StaticResource LxAccentPillButton}"
+                                Command="{Binding AddReporterTargetCommand}" Margin="0,0,8,0" />
+                        <Button Style="{StaticResource LxIconGhostButton}" Click="Close_Click" ToolTip="关闭">
+                            <Path Data="M0,0 L10,10 M10,0 L0,10" Width="10" Height="10" Stretch="None"
+                                  Stroke="{DynamicResource LxTextSecondaryBrush}" StrokeThickness="1.6"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <controls:LxGlassCard CornerRadius="{DynamicResource LxRadiusCard}" Padding="16,12" Margin="0,14,0,0">
+                    <StackPanel>
+                        <!-- 空态提示 -->
+                        <TextBlock Text="还没有上报目标。点右上角「添加目标」，把本机指标上报给任意 servermonitor 服务器。">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource LxCaption}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasReporterTargets}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <ItemsControl ItemsSource="{Binding ReporterTargets}" Margin="0,2,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,5,0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
+                                            <TextBlock Text="{Binding Url}" FontSize="13" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource LxTextPrimaryBrush}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding DetailText}" Style="{StaticResource LxCaption}"
+                                                       Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <!-- 最近上报结果（复用 ReporterStatuses，按 URL 关联；未上报隐藏） -->
+                                        <controls:LxStatusPill Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0"
+                                                               Text="{Binding Status.StatusText}" Level="{Binding Status.Level}">
+                                            <controls:LxStatusPill.Style>
+                                                <Style TargetType="controls:LxStatusPill">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasStatus}" Value="False">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </controls:LxStatusPill.Style>
+                                        </controls:LxStatusPill>
+
+                                        <CheckBox Grid.Column="2" Style="{StaticResource LxToggleSwitch}"
+                                                  IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,12,0"
+                                                  ToolTip="启用 / 停用该上报目标" />
+                                        <Button Grid.Column="3" Content="编辑" Style="{StaticResource LxPillButton}"
+                                                Command="{Binding DataContext.EditReporterTargetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <Button Grid.Column="4" Content="{Binding DeleteButtonText}" Style="{StaticResource LxPillButton}"
+                                                Command="{Binding DataContext.DeleteReporterTargetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}" VerticalAlignment="Center"
+                                                ToolTip="再次点击确认删除" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </controls:LxGlassCard>
+
+                <TextBlock Text="改动即时保存并按新配置重启全部上报端（无需重启工具箱）；Token 仅前 6 后 6 显示，完整值存于 settings.json 的 lx.monitor.reporters。"
+                           Style="{StaticResource LxCaption}" Margin="0,14,0,0" TextWrapping="Wrap" />
+            </StackPanel>
+        </ScrollViewer>
+    </Border>
+</Window>

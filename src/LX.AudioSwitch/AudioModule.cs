@@ -5,7 +5,7 @@ using LingXi.Sdk;
 
 namespace LingXi.AudioSwitch;
 
-/// <summary>凌溪·音频模块（开发文档 8 章）。</summary>
+/// <summary>音频设备切换模块（开发文档 8 章）。</summary>
 public sealed class AudioModule : ILxToolModule
 {
     private ILxModuleContext _ctx = null!;
@@ -13,7 +13,7 @@ public sealed class AudioModule : ILxToolModule
 
     public string Id => "lx.audioswitch";
 
-    public string DisplayName => "凌溪·音频";
+    public string DisplayName => "音频设备切换";
 
     public string IconGlyph => "Speaker24";
 

@@ -8,7 +8,7 @@ using LingXi.Sdk;
 
 namespace LingXi.Monitor;
 
-/// <summary>凌溪·监控模块（开发文档 9 章）：LX Hub + agent 托管 + 仪表盘 + 告警。</summary>
+/// <summary>机器状态监控模块（开发文档 9 章）：LX Hub + agent 托管 + 仪表盘 + 告警。</summary>
 public sealed class MonitorModule : ILxToolModule
 {
     private ILxModuleContext _ctx = null!;
@@ -23,7 +23,7 @@ public sealed class MonitorModule : ILxToolModule
 
     public string Id => "lx.monitor";
 
-    public string DisplayName => "凌溪·监控";
+    public string DisplayName => "机器状态监控";
 
     public string IconGlyph => "DataUsage24";
 
@@ -93,7 +93,7 @@ public sealed class MonitorModule : ILxToolModule
             _agent.Start();
         }
 
-        // 引导卡地址：LAN 形式 report URL（第一个非回环 IPv4；端口取 Hub 实际端口，含顺延）
+        // 添加机器悬浮窗地址：LAN 形式 report URL（第一个非回环 IPv4；端口取 Hub 实际端口，含顺延）
         var lanReportUrl = $"http://{GetLanIpv4()}:{_hub.Port}/servermonitor/report";
 
         _vm = new DashboardViewModel(
@@ -113,6 +113,10 @@ public sealed class MonitorModule : ILxToolModule
         _vm.Prompt = (title, current) =>
             Views.InputBoxWindow.Show(title, "输入该机器的显示别名（留空恢复原名称）", current);
         _vm.EditReporter = target => Views.ReporterEditorWindow.Show(target);
+        // 悬浮窗入口（信息架构改版）：机器详情 / 添加机器 / 上报目标管理
+        _vm.ShowMachineDetailWindow = card => Views.MachineDetailWindow.Show(card);
+        _vm.ShowAddMachineWindow = () => Views.AddMachineWindow.Show(_vm);
+        _vm.ShowReporterManagerWindow = () => Views.ReporterManagerWindow.Show(_vm);
 
         // 上报端（双向监控）：把本机指标按 servermonitor 协议上报给各目标服务器
         StartReporters();
@@ -145,7 +149,7 @@ public sealed class MonitorModule : ILxToolModule
             var online = _store.IsOnline(envelope.Snapshot.Name, now);
             foreach (var alert in _alerts.Evaluate(envelope, online, now))
             {
-                _ctx.Notify.Show("凌溪·监控", alert.Message);
+                _ctx.Notify.Show("机器状态监控", alert.Message);
             }
         });
     }
@@ -209,19 +213,34 @@ public sealed class MonitorModule : ILxToolModule
         _reporters.Clear();
     }
 
-    /// <summary>第一个非回环 IPv4（Up 状态、非 Loopback 接口）；取不到或异常回退 127.0.0.1。</summary>
+    /// <summary>
+    /// 局域网 IPv4（供远程 agent 上报用）。排除虚拟/隧道网卡（WSL、GameViewer 虚拟交换机、TAP 等）：
+    /// 只认 Up 且带默认网关的接口优先（真实外联网络），排除环回/隧道/PPP；
+    /// 段偏好 192.168.x &gt; 10.x &gt; 172.x，避免把 WSL 虚拟段（172.x）当地址。取不到回退 127.0.0.1。
+    /// </summary>
     private static string GetLanIpv4()
     {
         try
         {
-            var address = NetworkInterface.GetAllNetworkInterfaces()
+            var candidates = NetworkInterface.GetAllNetworkInterfaces()
                 .Where(n => n.OperationalStatus == OperationalStatus.Up &&
-                            n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-                .SelectMany(n => n.GetIPProperties().UnicastAddresses)
-                .Select(a => a.Address)
-                .FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork &&
-                                     !IPAddress.IsLoopback(a));
-            return address?.ToString() ?? "127.0.0.1";
+                            n.NetworkInterfaceType is not NetworkInterfaceType.Loopback
+                                and not NetworkInterfaceType.Tunnel
+                                and not NetworkInterfaceType.Ppp)
+                .OrderByDescending(n => n.GetIPProperties().GatewayAddresses.Count > 0)
+                .SelectMany(n => n.GetIPProperties().UnicastAddresses.Select(a => (n, a.Address)))
+                .Where(x => x.Address.AddressFamily == AddressFamily.InterNetwork &&
+                            !IPAddress.IsLoopback(x.Address))
+                .Select(x => x.Address.ToString())
+                .ToList();
+
+            if (candidates.Count == 0)
+            {
+                return "127.0.0.1";
+            }
+            return candidates.FirstOrDefault(s => s.StartsWith("192.168."))
+                ?? candidates.FirstOrDefault(s => s.StartsWith("10."))
+                ?? candidates[0];
         }
         catch
         {

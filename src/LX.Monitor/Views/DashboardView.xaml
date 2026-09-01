@@ -3,14 +3,15 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:LingXi.Ui.Controls;assembly=LX.Ui">
 
-    <!-- 监控仪表盘（开发文档 9.5）+ 机器列表管理（档案合并/添加引导/编辑） -->
+    <!--
+      监控仪表盘（开发文档 9.5）· 信息架构改版：
+      页面只保留机器状态列表（+ 已隐藏机器折叠区）；
+      添加机器引导 / 上报目标管理 / 机器详情收进悬浮窗
+      （AddMachineWindow / ReporterManagerWindow / MachineDetailWindow）。
+    -->
 
     <UserControl.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <!-- 模块内 iOS 风格拨动开关样式（不动 LX.Ui 公共文件） -->
-                <ResourceDictionary Source="pack://application:,,,/LX.Monitor;component/Themes/ToggleSwitch.xaml" />
-            </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis" />
         </ResourceDictionary>
     </UserControl.Resources>
@@ -39,202 +40,30 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
-                        <TextBlock Text="凌溪·监控" Style="{StaticResource LxTitle}" />
+                        <TextBlock Text="机器状态监控" Style="{StaticResource LxTitle}" />
                         <TextBlock Text="本地收数端 · 与 servermonitor 协议同源" Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
                     </StackPanel>
                 </Grid>
 
-                <!-- 添加机器引导卡（可折叠；无档案机器时默认展开） -->
-                <controls:LxGlassCard CornerRadius="{DynamicResource LxRadiusSheet}" Padding="18,14" Margin="0,0,0,18">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="添加机器" FontSize="16" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource LxTextPrimaryBrush}" />
-                                <TextBlock Text="把官方 agent 指向本机 Hub，装好后自动出现在列表" Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
-                            </StackPanel>
-                            <Button Grid.Column="1" Style="{StaticResource LxPillButton}"
-                                    Command="{Binding ToggleGuideCommand}" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding GuideToggleText}" />
-                            </Button>
-                        </Grid>
-
-                        <StackPanel Margin="0,4,0,0">
-                            <StackPanel.Style>
-                                <Style TargetType="StackPanel">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding GuideExpanded}" Value="False">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </StackPanel.Style>
-
-                            <!-- Report URL（局域网） -->
-                            <Grid Margin="0,10,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="Report URL（局域网，取第一个非回环 IPv4）" Style="{StaticResource LxCaption}" />
-                                    <TextBlock Text="{Binding LanReportUrl}" FontSize="13" Margin="0,3,0,0"
-                                               Foreground="{DynamicResource LxTextPrimaryBrush}"
-                                               TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                                <Button Grid.Column="1" Content="复制" Style="{StaticResource LxPillButton}"
-                                        Command="{Binding CopyToClipboardCommand}" CommandParameter="{Binding LanReportUrl}"
-                                        VerticalAlignment="Center" Margin="12,0,0,0" />
-                            </Grid>
-
-                            <!-- Hub Token -->
-                            <Grid Margin="0,12,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="Hub Token" Style="{StaticResource LxCaption}" />
-                                    <TextBlock Text="{Binding HubToken}" FontSize="13" Margin="0,3,0,0"
-                                               Foreground="{DynamicResource LxTextPrimaryBrush}"
-                                               TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                                <Button Grid.Column="1" Content="复制" Style="{StaticResource LxPillButton}"
-                                        Command="{Binding CopyToClipboardCommand}" CommandParameter="{Binding HubToken}"
-                                        VerticalAlignment="Center" Margin="12,0,0,0" />
-                            </Grid>
-
-                            <!-- 官方 agent 一行部署命令（PowerShell） -->
-                            <Grid Margin="0,12,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="Agent 部署命令（PowerShell，把 &lt;机器名&gt; 换成目标机器名）" Style="{StaticResource LxCaption}" />
-                                    <TextBlock Text="{Binding DeployCommand}" FontSize="12" Margin="0,3,0,0"
-                                               FontFamily="Consolas, Courier New"
-                                               Foreground="{DynamicResource LxTextPrimaryBrush}"
-                                               TextWrapping="Wrap" />
-                                </StackPanel>
-                                <Button Grid.Column="1" Content="复制" Style="{StaticResource LxPillButton}"
-                                        Command="{Binding CopyToClipboardCommand}" CommandParameter="{Binding DeployCommand}"
-                                        VerticalAlignment="Center" Margin="12,0,0,0" />
-                            </Grid>
-
-                            <TextBlock Style="{StaticResource LxCaption}" Margin="0,12,0,0"
-                                       Text="官方 agent v0.1.14 从 github.com/qsbb/servermonitor 获取（Node 18+ 或 pkg exe）；装好并开始上报后自动出现在下方列表。" />
-                        </StackPanel>
-                    </StackPanel>
-                </controls:LxGlassCard>
-
-                <!-- LX Hub 信息卡 -->
-                <controls:LxGlassCard CornerRadius="{DynamicResource LxRadiusSheet}" Padding="18,14" Margin="0,0,0,18">
-                    <StackPanel>
-                        <TextBlock Text="LX Hub 收数端" Style="{StaticResource LxCaption}" />
-                        <TextBlock Text="{Binding HubReportUrl}" FontSize="14" FontWeight="SemiBold" Margin="0,3,0,0"
+                <!-- 机器状态标题行：右侧"+ 添加机器"胶囊 → AddMachineWindow 悬浮窗 -->
+                <Grid Margin="2,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="机器状态" FontSize="15" FontWeight="SemiBold"
                                    Foreground="{DynamicResource LxTextPrimaryBrush}" />
-                        <TextBlock Text="Token" Style="{StaticResource LxCaption}" Margin="0,10,0,0" />
-                        <TextBlock Text="{Binding HubToken}" FontSize="12" Margin="0,3,0,0"
-                                   Foreground="{DynamicResource LxTextPrimaryBrush}" />
-                        <TextBlock Style="{StaticResource LxCaption}" Margin="0,10,0,0"
-                                   Text="上面是本机回环地址；给局域网/远程机器部署 agent 请用顶部「添加机器」引导卡里的地址与命令。" />
+                        <TextBlock Text="agent 上报后自动出现在这里；点卡片右上角 ⋮ 查看详情"
+                                   Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
                     </StackPanel>
-                </controls:LxGlassCard>
-
-                <!-- 上报目标管理卡（双向监控）：目标列表 + 增删改 + 最近上报状态合并 -->
-                <controls:LxGlassCard CornerRadius="{DynamicResource LxRadiusSheet}" Padding="18,14" Margin="0,0,0,18">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="上报目标管理" FontSize="16" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource LxTextPrimaryBrush}" />
-                                <TextBlock Text="本机指标按 servermonitor 协议上报给以下服务器（双向监控）"
-                                           Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
-                            </StackPanel>
-                            <Button Grid.Column="1" Content="添加目标" Style="{StaticResource LxAccentPillButton}"
-                                    Command="{Binding AddReporterTargetCommand}" VerticalAlignment="Center" />
-                        </Grid>
-
-                        <!-- 空态提示 -->
-                        <TextBlock Text="还没有上报目标。点右上角「添加目标」，把本机指标上报给任意 servermonitor 服务器。">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock" BasedOn="{StaticResource LxCaption}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding HasReporterTargets}" Value="True">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-
-                        <ItemsControl ItemsSource="{Binding ReporterTargets}" Margin="0,4,0,0">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="0,5,0,5">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
-                                            <TextBlock Text="{Binding Url}" FontSize="13" FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource LxTextPrimaryBrush}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding DetailText}" Style="{StaticResource LxCaption}"
-                                                       Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
-
-                                        <!-- 最近上报结果（复用 ReporterStatuses，按 URL 关联；未上报隐藏） -->
-                                        <controls:LxStatusPill Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0"
-                                                               Text="{Binding Status.StatusText}" Level="{Binding Status.Level}">
-                                            <controls:LxStatusPill.Style>
-                                                <Style TargetType="controls:LxStatusPill">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding HasStatus}" Value="False">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </controls:LxStatusPill.Style>
-                                        </controls:LxStatusPill>
-
-                                        <CheckBox Grid.Column="2" Style="{StaticResource LxToggleSwitch}"
-                                                  IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,12,0"
-                                                  ToolTip="启用 / 停用该上报目标" />
-                                        <Button Grid.Column="3" Content="编辑" Style="{StaticResource LxPillButton}"
-                                                Command="{Binding DataContext.EditReporterTargetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                        <Button Grid.Column="4" Content="{Binding DeleteButtonText}" Style="{StaticResource LxPillButton}"
-                                                Command="{Binding DataContext.DeleteReporterTargetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                CommandParameter="{Binding}" VerticalAlignment="Center"
-                                                ToolTip="再次点击确认删除" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-
-                        <TextBlock Text="改动即时保存并按新配置重启全部上报端（无需重启工具箱）；Token 仅前 6 后 6 显示，完整值存于 settings.json 的 lx.monitor.reporters。"
-                                   Style="{StaticResource LxCaption}" Margin="0,8,0,0" />
-                    </StackPanel>
-                </controls:LxGlassCard>
-
-                <TextBlock Text="机器状态" FontSize="15" FontWeight="SemiBold"
-                           Foreground="{DynamicResource LxTextPrimaryBrush}" Margin="2,0,0,12" />
+                    <Button Grid.Column="1" Content="+ 添加机器" Style="{StaticResource LxAccentPillButton}"
+                            Command="{Binding OpenAddMachineCommand}" VerticalAlignment="Center"
+                            ToolTip="打开添加机器悬浮窗：局域网 agent 接入 + 上报目标管理" />
+                </Grid>
 
                 <!-- 空态提示 -->
-                <TextBlock Text="暂无机器。点开顶部「添加机器」复制部署命令，agent 上报后自动出现在这里。">
+                <TextBlock Text="暂无机器。点右上角「+ 添加机器」复制部署命令，agent 上报后自动出现在这里。">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock" BasedOn="{StaticResource LxCaption}">
                             <Style.Triggers>
@@ -278,20 +107,29 @@
                                                                    Visibility="{Binding IsPinned, Converter={StaticResource BoolToVis}}" />
                                             <controls:LxStatusPill Text="{Binding StatusText}" Level="{Binding Level}" />
                                             <Button Style="{StaticResource LxIconGhostButton}" Content="⋮" FontSize="14"
-                                                    Margin="4,0,0,0" Click="MenuButton_Click">
+                                                    Margin="4,0,0,0" Click="MenuButton_Click" ToolTip="机器操作：详情 / 编辑 / 置顶 / 隐藏">
                                                 <Button.ContextMenu>
                                                     <ContextMenu Placement="Bottom"
                                                                  DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
                                                                  Background="{DynamicResource LxPageBgBrush}"
                                                                  Foreground="{DynamicResource LxTextPrimaryBrush}"
                                                                  BorderBrush="{DynamicResource LxGlassBorderBrush}">
-                                                        <MenuItem Header="设置别名…"
+                                                        <MenuItem Header="显示详情"
+                                                                  Command="{Binding Owner.ShowMachineDetailCommand}" CommandParameter="{Binding}"
+                                                                  Foreground="{DynamicResource LxTextPrimaryBrush}" />
+                                                        <MenuItem Header="编辑…"
                                                                   Command="{Binding Owner.SetAliasCommand}" CommandParameter="{Binding}"
                                                                   Foreground="{DynamicResource LxTextPrimaryBrush}" />
+                                                        <!-- 删除：仅未上报过的档案机器（上报过的删了会随下一包快照回来，走隐藏） -->
+                                                        <MenuItem Header="删除"
+                                                                  Command="{Binding Owner.DeleteMachineCommand}" CommandParameter="{Binding}"
+                                                                  Foreground="{DynamicResource LxTextPrimaryBrush}"
+                                                                  Visibility="{Binding CanDelete, Converter={StaticResource BoolToVis}}"
+                                                                  ToolTip="从档案移除该机器（仅未上报的档案机器）" />
+                                                        <Separator />
                                                         <MenuItem Header="{Binding PinMenuText}"
                                                                   Command="{Binding Owner.TogglePinCommand}" CommandParameter="{Binding}"
                                                                   Foreground="{DynamicResource LxTextPrimaryBrush}" />
-                                                        <Separator />
                                                         <MenuItem Header="隐藏此机器"
                                                                   Command="{Binding Owner.HideMachineCommand}" CommandParameter="{Binding}"
                                                                   Foreground="{DynamicResource LxTextPrimaryBrush}" />

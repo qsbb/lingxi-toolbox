@@ -124,7 +124,7 @@
             <StackPanel>
                 <TextBlock Text="监控" FontSize="15" FontWeight="SemiBold"
                            Foreground="{DynamicResource LxTextPrimaryBrush}" Margin="0,0,0,2" />
-                <TextBlock Text="凌溪·监控 Hub 收数端"
+                <TextBlock Text="机器状态监控 Hub 收数端"
                            Style="{StaticResource LxCaption}" Margin="0,0,0,6" />
 
                 <!-- Hub 绑定全网卡（lx.monitor.BindLan，重启生效） -->
@@ -144,7 +144,7 @@
                               ToolTip="绑定全网卡开 / 关（重启后生效）" />
                 </Grid>
 
-                <TextBlock Text="重启工具箱后生效；上报目标（双向监控）等其余监控设置在「凌溪·监控」页管理。"
+                <TextBlock Text="重启工具箱后生效；上报目标（双向监控）等其余监控设置在「机器状态监控」页管理。"
                            Style="{StaticResource LxCaption}" Margin="0,8,0,0" />
             </StackPanel>
         </controls:LxGlassCard>

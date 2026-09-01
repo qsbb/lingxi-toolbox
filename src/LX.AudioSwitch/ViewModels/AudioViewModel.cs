@@ -202,13 +202,13 @@ public partial class AudioViewModel : ObservableObject
         {
             _audio.SetDefault(item.Id);
             Refresh();
-            _ctx.Notify.Show("凌溪·音频", $"已切换到「{item.DisplayName}」");
+            _ctx.Notify.Show("音频设备切换", $"已切换到「{item.DisplayName}」");
             ShowSwitchHud(item.DisplayName);
         }
         catch (Exception ex)
         {
             _ctx.Log.Error("切换默认设备失败", ex);
-            _ctx.Notify.Show("凌溪·音频", $"切换失败：{ex.Message}");
+            _ctx.Notify.Show("音频设备切换", $"切换失败：{ex.Message}");
         }
     }
 
@@ -272,7 +272,7 @@ public partial class AudioViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _ctx.Notify.Show("凌溪·音频", $"无法打开添加设备窗口：{ex.Message}");
+            _ctx.Notify.Show("音频设备切换", $"无法打开添加设备窗口：{ex.Message}");
         }
     }
 
