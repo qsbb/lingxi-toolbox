@@ -19,6 +19,9 @@
     <!-- 主题 -->
     <SolidColorBrush x:Key="LxTintBrush" Color="#FF0A84FF" />
     <SolidColorBrush x:Key="LxPageBgBrush" Color="#FF000000" />
+    <SolidColorBrush x:Key="LxSwitchOnBrush" Color="#FF30D158" />
+    <SolidColorBrush x:Key="LxSwitchOffBrush" Color="#FF39393D" />
+    <SolidColorBrush x:Key="LxSwitchThumbBrush" Color="#FFFFFFFF" />
 
     <!-- 玻璃材质（深色：rgba(30,30,34,~0.6) + 白 3%~30% 描边） -->
     <SolidColorBrush x:Key="LxGlassFillBrush" Color="#991E1E22" />
