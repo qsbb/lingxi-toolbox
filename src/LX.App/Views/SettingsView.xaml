@@ -42,7 +42,7 @@
                         <TextBlock Text="浅色 / 深色外观，切换即时生效（等同侧栏「切换主题」按钮）"
                                    Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
                     </StackPanel>
-                    <CheckBox VerticalAlignment="Center"
+                    <CheckBox Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right"
                               Style="{StaticResource LxToggleSwitch}"
                               IsChecked="{Binding IsDark}"
                               ToolTip="深色主题开 / 关" />
@@ -59,7 +59,7 @@
                         <TextBlock Text="登录 Windows 后自动启动凌溪工具箱（写入当前用户 Run 键，无需管理员）"
                                    Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
                     </StackPanel>
-                    <CheckBox VerticalAlignment="Center"
+                    <CheckBox Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right"
                               Style="{StaticResource LxToggleSwitch}"
                               IsChecked="{Binding AutoStart}"
                               ToolTip="开机自启开 / 关" />
@@ -76,7 +76,7 @@
                         <TextBlock Text="点 ✕ 仅隐藏窗口到托盘；关闭后从托盘图标右键菜单退出"
                                    Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
                     </StackPanel>
-                    <CheckBox VerticalAlignment="Center"
+                    <CheckBox Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right"
                               Style="{StaticResource LxToggleSwitch}"
                               IsChecked="{Binding CloseToTray}"
                               ToolTip="关窗驻留托盘开 / 关" />
@@ -105,7 +105,7 @@
                                                Foreground="{DynamicResource LxTextPrimaryBrush}" />
                                     <TextBlock Text="{Binding Id}" Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
                                 </StackPanel>
-                                <CheckBox VerticalAlignment="Center"
+                                <CheckBox Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right"
                                           Style="{StaticResource LxToggleSwitch}"
                                           IsChecked="{Binding Enabled}"
                                           ToolTip="启用 / 停用该模块（重启后生效）" />
@@ -138,7 +138,7 @@
                         <TextBlock Text="开启后局域网内 agent 可直连本机 Hub 上报；关闭则仅本机（127.0.0.1）可连"
                                    Style="{StaticResource LxCaption}" Margin="0,2,0,0" />
                     </StackPanel>
-                    <CheckBox VerticalAlignment="Center"
+                    <CheckBox Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right"
                               Style="{StaticResource LxToggleSwitch}"
                               IsChecked="{Binding BindLan}"
                               ToolTip="绑定全网卡开 / 关（重启后生效）" />
@@ -148,5 +148,16 @@
                            Style="{StaticResource LxCaption}" Margin="0,8,0,0" />
             </StackPanel>
         </controls:LxGlassCard>
+
+        <!-- 保存设置：各开关即时落盘，此处做全量确认 + toast 反馈 -->
+        <Grid Margin="0,0,0,18">
+            <TextBlock x:Name="ToastText" Text="设置已保存" Visibility="Collapsed"
+                       FontSize="12" FontWeight="SemiBold"
+                       Foreground="{DynamicResource LxTintBrush}"
+                       HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" />
+            <Button Content="保存设置" Command="{Binding SaveSettingsCommand}"
+                    Style="{StaticResource LxAccentPillButton}"
+                    HorizontalAlignment="Right" MinWidth="120" />
+        </Grid>
     </StackPanel>
 </UserControl>

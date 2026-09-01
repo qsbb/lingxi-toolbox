@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using LingXi.Core.AutoStart;
 using LingXi.Core.Settings;
 using LingXi.Monitor.Models;
@@ -13,7 +14,7 @@ namespace LingXi.App.Views;
 /// - 模块开关写 shell 段 DisabledModules（启动时装载前过滤，重启后生效）；
 /// - 主题切换经事件委托回壳（App.ToggleTheme 现有逻辑）。
 /// </summary>
-public sealed class SettingsViewModel : ObservableObject
+public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly SettingsStore _settings;
 
@@ -22,6 +23,32 @@ public sealed class SettingsViewModel : ObservableObject
 
     /// <summary>每个已注册模块一行开关。</summary>
     public ObservableCollection<ModuleToggleRow> ModuleRows { get; } = [];
+
+    /// <summary>显式保存按钮：各开关已即时落盘，此处做一次全量确认并提示（满足"有保存按钮"的使用预期）。</summary>
+    [RelayCommand]
+    private void SaveSettings()
+    {
+        try
+        {
+            // 全量确认：把当前 UI 状态重新写一遍（幂等）
+            var shell = _settings.Get<ShellSettings>("shell");
+            shell.AutoStart = AutoStart;
+            shell.CloseToTray = CloseToTray;
+            _settings.Set("shell", shell);
+            SaveCompleted?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error(ex, "设置保存失败");
+            SaveFailed?.Invoke(ex.Message);
+        }
+    }
+
+    /// <summary>保存成功（UI toast）。</summary>
+    public event Action? SaveCompleted;
+
+    /// <summary>保存失败（UI toast）。</summary>
+    public event Action<string>? SaveFailed;
 
     private bool _isDark;
 

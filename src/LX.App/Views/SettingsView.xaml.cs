@@ -20,10 +20,26 @@ public partial class SettingsView : UserControl
     {
         InitializeComponent();
         _vm = new SettingsViewModel(settings, modules, isDark);
+        _vm.SaveCompleted += () => Toast("设置已保存");
+        _vm.SaveFailed += msg => Toast($"保存失败：{msg}");
         _vm.ThemeToggleRequested += () => ThemeToggleRequested?.Invoke();
         DataContext = _vm;
     }
 
     /// <summary>壳在其它入口（侧栏按钮/托盘）切换主题后回同步深色开关显示。</summary>
     public void SyncThemeState(bool isDark) => _vm.SyncTheme(isDark);
+
+    /// <summary>轻量 toast：主按钮旁浮出文字，1.8s 自动隐藏（DispatcherTimer，冻结合规）。</summary>
+    private void Toast(string message)
+    {
+        ToastText.Text = message;
+        ToastText.Visibility = Visibility.Visible;
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1.8) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            ToastText.Visibility = Visibility.Collapsed;
+        };
+        timer.Start();
+    }
 }
