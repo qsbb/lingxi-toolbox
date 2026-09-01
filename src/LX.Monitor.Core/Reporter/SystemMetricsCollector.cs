@@ -22,8 +22,32 @@ public sealed class SystemMetricsCollector
 
     public string MachineName { get; set; } = Environment.MachineName;
 
-    /// <summary>采集一帧完整快照（含静态信息缓存 + 动态指标）。</summary>
-    public Snapshot Collect()
+    /// <summary>
+    /// 采集一帧完整快照（含静态信息缓存 + 动态指标）。
+    /// 名称经服务端同款清洗（≤32 字符、剔除 &lt;&gt;&amp;"'`\、空白→下划线），
+    /// 全空快照返回 null（服务端对空快照回 422，见适配文档）。
+    /// </summary>
+    public Snapshot? Collect()
+    {
+        var snap = CollectRaw();
+        if (snap is null)
+        {
+            return null;
+        }
+        snap.Name = SanitizeName(snap.Name);
+        return snap;
+    }
+
+    /// <summary>按第三方适配文档契约清洗上报名称（对齐服务端 sanitizeServerName）。</summary>
+    public static string SanitizeName(string raw)
+    {
+        var cleaned = new string(raw.Where(c => c is not '<' and not '>' and not '&' and not '"' and not '\'' and not '`' and not '\\').ToArray());
+        // 连续空白折叠成单下划线（与服务端 replace(/\s+/g, "_") 一致）
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\s+", "_");
+        return cleaned.Length > 32 ? cleaned[..32] : cleaned;
+    }
+
+    private Snapshot? CollectRaw()
     {
         var now = DateTime.Now;
 
@@ -39,7 +63,7 @@ public sealed class SystemMetricsCollector
         var mem = _memInfo ?? (0, 0);
         var net = GetNetwork();
 
-        return new Snapshot
+        var snap = new Snapshot
         {
             Version = 1,
             Name = string.IsNullOrWhiteSpace(MachineName) ? Environment.MachineName : MachineName,
@@ -73,6 +97,14 @@ public sealed class SystemMetricsCollector
             Disks = QueryDisks(),
             Load = null, // 协议规定：Windows 恒 null
         };
+
+        // 空快照防护（适配文档：全空快照 422 拒收）——
+        // 至少一项动态指标可用才发出：cpu.usage / mem 总量 / disks 条数 / net
+        var hasAnyMetric = snap.Cpu?.Usage is not null
+            || (snap.Mem?.Total is > 0)
+            || (snap.Disks is { Count: > 0 })
+            || snap.Net is not null;
+        return hasAnyMetric ? snap : null;
     }
 
     private (string Model, int Cores) QueryCpuInfo()

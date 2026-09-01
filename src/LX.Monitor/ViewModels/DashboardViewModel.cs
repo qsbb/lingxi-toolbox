@@ -134,6 +134,21 @@ public partial class DashboardViewModel : ObservableObject
         ReporterTargets.FirstOrDefault(r => r.Source.Url == url)?.AttachStatus(existing);
     }
 
+    /// <summary>独立 token 首次上报 202 待绑定：状态行改为待绑定指引（适配文档 3.2）。</summary>
+    public void MarkReporterBindPending(string url)
+    {
+        var existing = ReporterStatuses.FirstOrDefault(r => r.Url == url);
+        if (existing is null)
+        {
+            ReporterStatuses.Add(new ReporterStatusVm(url, false, null, "待绑定：在 Yunzai 主人私聊发送 #服务器状态待绑定 获取绑定命令"));
+        }
+        else
+        {
+            existing.Update(false, null, "待绑定：#服务器状态待绑定");
+        }
+        HasReporters = true;
+    }
+
     /// <summary>上报失败回调（UI 层可调用）。</summary>
     public void MarkReporterFail(string url, string reason)
     {

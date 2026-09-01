@@ -179,6 +179,9 @@ public sealed class MonitorModule : ILxToolModule
                 var url = target.Url;
                 reporter.Reported += elapsed => Application.Current?.Dispatcher.BeginInvoke(
                     (Action)(() => _vm?.MarkReporterOk(url, elapsed)));
+                // 独立 token 首次上报 202 待绑定：状态行提示绑定指引（适配文档 3.2）
+                reporter.BindPending += pendingUrl => Application.Current?.Dispatcher.BeginInvoke(
+                    (Action)(() => _vm?.MarkReporterBindPending(pendingUrl)));
                 reporter.Start();
                 _reporters.Add(reporter);
                 _ctx.Log.Info($"上报端已启动 → {url}（间隔 {target.IntervalSec}s）");
