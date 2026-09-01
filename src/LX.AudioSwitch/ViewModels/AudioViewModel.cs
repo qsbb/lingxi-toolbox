@@ -1,3 +1,5 @@
+using System.Windows.Input;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Threading;
@@ -48,11 +50,33 @@ public partial class AudioViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSwitchHudOpen;
 
-    /// <summary>热键键帽序列（kbd 风格逐键显示，来自 lx.audioswitch.CycleHotkey）。</summary>
-    public IReadOnlyList<string> HotkeyKeys { get; }
+    /// <summary>热键键帽序列（kbd 风格逐键显示；空 = 未启用热键）。</summary>
+    [ObservableProperty]
+    private IReadOnlyList<string> _hotkeyKeys = [];
 
-    /// <summary>热键组合原始文本（兜底展示/无障碍读值）。</summary>
-    public string CycleHotkeyText { get; }
+    /// <summary>热键组合原始文本（兜底展示/无障碍读值；空 = 未启用）。</summary>
+    [ObservableProperty]
+    private string _cycleHotkeyText = "";
+
+    /// <summary>是否处于录制态（点击"修改热键"后按键直接捕获）。</summary>
+    [ObservableProperty]
+    private bool _isRecordingHotkey;
+
+    /// <summary>录制提示文字。</summary>
+    [ObservableProperty]
+    private string _recordingHint = "点击键帽修改热键（按退格清空=停用；Esc 取消）。热键在已保存设备间循环切换。";
+
+    /// <summary>热键修改回调（模块注册重载用，VM 保存后通知模块重新 Register）。</summary>
+    public event Action<string?>? HotkeyChanged;
+
+    /// <summary>把 "Ctrl+Alt+A" 文本应用到 UI（键帽拆分 + 文本）。</summary>
+    private void ApplyHotkeyText(string text)
+    {
+        CycleHotkeyText = text;
+        HotkeyKeys = string.IsNullOrEmpty(text)
+            ? []
+            : [.. text.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+    }
 
     public AudioViewModel(IAudioEndpointService audio, ILxModuleContext ctx)
     {
@@ -60,15 +84,7 @@ public partial class AudioViewModel : ObservableObject
         _ctx = ctx;
 
         var saved = ctx.Settings.Get<AudioSettings>("lx.audioswitch");
-        CycleHotkeyText = string.IsNullOrWhiteSpace(saved.CycleHotkey)
-            ? "Ctrl+Alt+A"
-            : saved.CycleHotkey.Trim();
-        HotkeyKeys = [.. CycleHotkeyText.Split('+',
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
-        if (HotkeyKeys.Count == 0)
-        {
-            HotkeyKeys = ["Ctrl", "Alt", "A"];
-        }
+        ApplyHotkeyText(string.IsNullOrWhiteSpace(saved.CycleHotkey) ? "" : saved.CycleHotkey.Trim());
 
         _audio.DevicesChanged += OnAudioChanged;
         LoadSettings(saved);
@@ -326,10 +342,78 @@ public partial class AudioViewModel : ObservableObject
             SavedDevices = Devices
                 .Select(d => new Models.SavedDevice { Id = d.Id, Alias = d.DisplayName })
                 .ToList(),
-            CycleHotkey = _ctx.Settings.Get<Models.AudioSettings>("lx.audioswitch").CycleHotkey,
+            CycleHotkey = CycleHotkeyText,
             ShowSwitchHud = _ctx.Settings.Get<Models.AudioSettings>("lx.audioswitch").ShowSwitchHud,
         };
         _ctx.Settings.Set("lx.audioswitch", saved);
+    }
+
+    // ============ 热键录制（应用内修改，退格=清空/不启用） ============
+
+    /// <summary>进入录制态（UI 点击"修改热键"）。</summary>
+    [RelayCommand]
+    private void EditHotkey()
+    {
+        IsRecordingHotkey = true;
+        RecordingHint = "请按下新组合键（可含 Ctrl/Alt/Shift/Win）；按退格键清空并停用；Esc 取消";
+    }
+
+    /// <summary>取消录制（保留原热键）。</summary>
+    [RelayCommand]
+    private void CancelHotkeyRecording()
+    {
+        IsRecordingHotkey = false;
+        RecordingHint = "点击键帽修改热键（按退格清空=停用；Esc 取消）。热键在已保存设备间循环切换。";
+    }
+
+    /// <summary>
+    /// 录制态按键处理（由视图 PreviewKeyDown 转发）。
+    /// 修饰键本身忽略（等待组合完成）；退格=清空停用；Esc=取消；其余=组合键落地。
+    /// </summary>
+    internal void HandleRecordingKey(Key key, ModifierKeys mods)
+    {
+        if (!IsRecordingHotkey)
+        {
+            return;
+        }
+        if (key == Key.Escape)
+        {
+            CancelHotkeyRecording();
+            return;
+        }
+        if (key == Key.Back)
+        {
+            // 退格 = 清空（不开启热键）
+            SaveHotkeyAndReload("");
+            IsRecordingHotkey = false;
+            RecordingHint = "点击键帽修改热键（按退格清空=停用；Esc 取消）。热键在已保存设备间循环切换。";
+            return;
+        }
+        // 单独按修饰键不算完成
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
+            or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin
+            or Key.System or Key.Left or Key.Right or Key.Up or Key.Down)
+        {
+            return;
+        }
+        // 无修饰键的功能键/字母也可接受，但纯单键易误触——允许（用户显式选择）
+        var parts = new List<string>();
+        if (mods.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
+        if (mods.HasFlag(ModifierKeys.Alt)) parts.Add("Alt");
+        if (mods.HasFlag(ModifierKeys.Shift)) parts.Add("Shift");
+        if (mods.HasFlag(ModifierKeys.Windows)) parts.Add("Win");
+        parts.Add(key.ToString());
+        SaveHotkeyAndReload(string.Join("+", parts));
+        IsRecordingHotkey = false;
+        RecordingHint = "点击键帽修改热键（按退格清空=停用；Esc 取消）。热键在已保存设备间循环切换。";
+    }
+
+    /// <summary>保存热键到 settings 并触发模块重载注册；空串=停用。</summary>
+    private void SaveHotkeyAndReload(string gesture)
+    {
+        ApplyHotkeyText(gesture);
+        SaveSettings();
+        HotkeyChanged?.Invoke(string.IsNullOrEmpty(gesture) ? null : gesture);
     }
 
     internal void Shutdown()

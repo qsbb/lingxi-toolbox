@@ -36,7 +36,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type controls:LxStatusPill}">
-                    <Border x:Name="Root" CornerRadius="999" Padding="9,3"
+                    <Border x:Name="Root" CornerRadius="{DynamicResource LxRadiusCapsule}" Padding="9,4"
                             Background="{DynamicResource LxPillInfoBgBrush}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Ellipse x:Name="Dot" Width="7" Height="7" VerticalAlignment="Center"

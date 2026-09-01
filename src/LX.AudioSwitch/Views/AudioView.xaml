@@ -144,7 +144,7 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="48" Height="48" CornerRadius="12"
+                    <Border Width="48" Height="48" CornerRadius="24"
                             Background="{DynamicResource LxGlassFillBrush}"
                             BorderBrush="{DynamicResource LxGlassBorderBrush}" BorderThickness="1">
                         <TextBlock Text="&#xE767;"
@@ -254,7 +254,7 @@
                         </Grid.ColumnDefinitions>
 
                         <Border Width="44" Height="44"
-                                CornerRadius="12"
+                                CornerRadius="22"
                                 Background="{DynamicResource LxGlassFillBrush}">
                             <TextBlock Text="&#xE765;"
                                        FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol"
@@ -266,28 +266,89 @@
                         <StackPanel Grid.Column="1" Margin="14,0,10,0" VerticalAlignment="Center">
                             <TextBlock Text="循环切换热键" FontSize="13" FontWeight="SemiBold"
                                        Foreground="{DynamicResource LxTextPrimaryBrush}" />
-                            <ItemsControl ItemsSource="{Binding HotkeyKeys}" Margin="0,8,0,0"
-                                          HorizontalAlignment="Left">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Style="{StaticResource LxKeyCap}" Margin="0,0,6,0">
-                                            <TextBlock Text="{Binding}" FontSize="12" FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource LxTextPrimaryBrush}" />
+                            <!-- 键帽区 = 录制入口：点击进入录制态 -->
+                            <Button Margin="0,8,0,0" HorizontalAlignment="Left" Cursor="Hand"
+                                    Command="{Binding EditHotkeyCommand}"
+                                    Focusable="True"
+                                    x:Name="HotkeyCapButton"
+                                    PreviewKeyDown="HotkeyCapButton_PreviewKeyDown">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="Root" Style="{StaticResource LxKeyCap}" Margin="0"
+                                                Background="{DynamicResource LxGlassFillBrush}"
+                                                BorderBrush="{DynamicResource LxGlassBorderBrush}"
+                                                BorderThickness="1" CornerRadius="8" Padding="10,4">
+                                            <StackPanel Orientation="Horizontal">
+                                                <!-- 已录制：键帽序列；未录制：提示文字 -->
+                                                <ItemsControl ItemsSource="{Binding HotkeyKeys}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Orientation="Horizontal" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Style="{StaticResource LxKeyCap}" Margin="0,0,6,0">
+                                                                <TextBlock Text="{Binding}" FontSize="12" FontWeight="SemiBold"
+                                                                           Foreground="{DynamicResource LxTextPrimaryBrush}" />
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <TextBlock FontSize="12" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource LxTextSecondaryBrush}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HotkeyKeys.Count}" Value="0">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                    <Setter Property="Text" Value="未设置（点击录制）" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsRecordingHotkey}" Value="True">
+                                                                    <Setter Property="Text" Value="正在录制…（退格=清空 Esc=取消）" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
                                         </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Root" Property="Opacity" Value="0.85" />
+                                            </Trigger>
+                                            <DataTrigger Binding="{Binding IsRecordingHotkey}" Value="True">
+                                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource LxTintBrush}" />
+                                                <Setter TargetName="Root" Property="BorderThickness" Value="2" />
+                                            </DataTrigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
                             <TextBlock Margin="0,8,0,0" TextWrapping="Wrap"
-                                       Text="按下热键在已保存设备间循环切换（自动跳过已拔出项）。可在 settings.json 的 lx.audioswitch.CycleHotkey 修改。"
+                                       Text="{Binding RecordingHint}"
                                        Style="{StaticResource LxCaption}" />
                         </StackPanel>
 
-                        <controls:LxStatusPill Grid.Column="2" Text="热键已启用" Level="Ok" VerticalAlignment="Center" />
+                        <controls:LxStatusPill Grid.Column="2" VerticalAlignment="Center">
+                            <controls:LxStatusPill.Style>
+                                <Style TargetType="controls:LxStatusPill">
+                                    <Setter Property="Text" Value="已启用" />
+                                    <Setter Property="Level" Value="Ok" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HotkeyKeys.Count}" Value="0">
+                                            <Setter Property="Text" Value="未启用" />
+                                            <Setter Property="Level" Value="Info" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsRecordingHotkey}" Value="True">
+                                            <Setter Property="Text" Value="录制中" />
+                                            <Setter Property="Level" Value="Warn" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </controls:LxStatusPill.Style>
+                        </controls:LxStatusPill>
                     </Grid>
                 </controls:LxGlassCard>
 

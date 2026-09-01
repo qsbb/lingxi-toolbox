@@ -43,6 +43,6 @@
     <CornerRadius x:Key="LxRadiusControl">10</CornerRadius>
     <CornerRadius x:Key="LxRadiusCard">16</CornerRadius>
     <CornerRadius x:Key="LxRadiusSheet">20</CornerRadius>
-    <CornerRadius x:Key="LxRadiusCapsule">999</CornerRadius>
+    <CornerRadius x:Key="LxRadiusCapsule">10</CornerRadius>
 
 </ResourceDictionary>

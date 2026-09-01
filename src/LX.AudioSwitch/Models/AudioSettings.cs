@@ -10,6 +10,7 @@ public sealed class SavedDevice
 public sealed class AudioSettings
 {
     public List<SavedDevice> SavedDevices { get; set; } = [];
-    public string CycleHotkey { get; set; } = "Ctrl+Alt+A";
+    /// <summary>循环切换热键（"Ctrl+Alt+A" 形式；空 = 不启用，默认关闭）。</summary>
+    public string CycleHotkey { get; set; } = "";
     public bool ShowSwitchHud { get; set; } = true;
 }

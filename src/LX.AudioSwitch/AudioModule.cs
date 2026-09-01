@@ -36,10 +36,33 @@ public sealed class AudioModule : ILxToolModule
         }
         _ctx.Tray.SetMenu(Id, BuildTrayActions());
 
-        // 全局热键：Ctrl+Alt+A 轮播切换（可在 settings.json 改 CycleHotkey）
+        // 全局热键：默认不启用（空手势）；应用内录制修改后热重载
         var gesture = _ctx.Settings.Get<Models.AudioSettings>("lx.audioswitch").CycleHotkey;
-        ctx.Hotkeys.Register($"{Id}.cycle", gesture, () => _vm?.CycleNext());
+        ApplyHotkey(string.IsNullOrWhiteSpace(gesture) ? null : gesture.Trim());
+
+        // VM 保存热键后通知模块重新注册（含清空 → 注销）
+        if (_vm is not null)
+        {
+            _vm.HotkeyChanged += g => Application.Current?.Dispatcher.BeginInvoke(() => ApplyHotkey(g));
+        }
     }
+
+    /// <summary>注册/重注册轮播热键；null 或空 = 注销（不启用）。</summary>
+    private void ApplyHotkey(string? gesture)
+    {
+        var id = $"{Id}.cycle";
+        _ctx.Hotkeys.Unregister(id);
+        if (string.IsNullOrWhiteSpace(gesture))
+        {
+            return;
+        }
+        var ok = _ctx.Hotkeys.Register(id, gesture, () => _vm?.CycleNext());
+        if (!ok)
+        {
+            _ctx.Notify.Show("音频设备切换", $"热键 {gesture} 注册失败（可能被其他程序占用）");
+        }
+    }
+
 
     private IReadOnlyList<LxTrayAction> BuildTrayActions()
     {

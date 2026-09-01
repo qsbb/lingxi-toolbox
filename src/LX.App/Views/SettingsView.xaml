@@ -12,7 +12,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Border Width="48" Height="48" CornerRadius="14"
+            <Border Width="48" Height="48" CornerRadius="24"
                     Background="{DynamicResource LxGlassFillBrush}"
                     BorderBrush="{DynamicResource LxGlassBorderBrush}" BorderThickness="1">
                 <TextBlock Text="⚙" FontSize="22"
