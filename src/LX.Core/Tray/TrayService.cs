@@ -48,8 +48,10 @@ public sealed class TrayService : ILxTray, IDisposable
         }
         catch
         {
-            // 回退到 ImageSource 通道
-            _icon.IconSource = iconSource;
+            // 安全回退：Windows 系统图标。
+            // ⚠️ 禁止回退 IconSource（H.NotifyIcon 内部 ToSmallIcon 会因图标流
+            // 无法解析抛 ArgumentException 且进程直接崩溃，见 WER 事件 08/31 18:55）
+            _icon.Icon = System.Drawing.SystemIcons.Application;
         }
         _icon.ForceCreate();
         _icon.TrayLeftMouseDown += (_, _) => OpenRequested?.Invoke();

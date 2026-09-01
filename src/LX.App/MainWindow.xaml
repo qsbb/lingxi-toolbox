@@ -76,9 +76,9 @@
                 </DockPanel>
             </Border>
 
-            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
-                <ContentControl x:Name="ModuleHost" Margin="14,0,10,10" />
-            </ScrollViewer>
+            <!-- 模块自管滚动：各视图有自己的 MainScroll。外层再套 ScrollViewer 会形成
+                 双层滚动冲突（滚轮被内层吞但内层高度计算失效 → 整页滚不动） -->
+            <ContentControl x:Name="ModuleHost" Grid.Column="1" Margin="14,0,10,10" />
         </Grid>
     </Grid>
 </ui:FluentWindow>
