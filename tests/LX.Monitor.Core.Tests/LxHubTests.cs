@@ -95,6 +95,38 @@ public class LxHubTests
     }
 
     [Fact]
+    public void Rejects_Future_Agent_Timestamp()
+    {
+        var store = new SnapshotStore();
+        var options = new HubOptions { Port = FreePort(), Tokens = [] };
+        using var hub = new LxHub(options, store);
+        hub.Start();
+        var future = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() +
+                     (long)TimeSpan.FromHours(1).TotalMilliseconds;
+        var body = $"{{\"v\":1,\"name\":\"future\",\"agent_ts\":{future},\"mem\":{{\"total\":1}}}}";
+
+        var (code, _) = Send(HttpMethod.Post, hub.ReportUrl, body, null);
+
+        Assert.Equal(422, code);
+        Assert.Null(store.Get("future"));
+    }
+
+    [Fact]
+    public void Subscriber_Failure_Does_Not_Fail_Committed_Report()
+    {
+        var store = new SnapshotStore();
+        var options = new HubOptions { Port = FreePort(), Tokens = [] };
+        using var hub = new LxHub(options, store);
+        hub.SnapshotReceived += _ => throw new InvalidOperationException("observer failed");
+        hub.Start();
+
+        var (code, _) = Send(HttpMethod.Post, hub.ReportUrl, SnapshotBody, null);
+
+        Assert.Equal(200, code);
+        Assert.NotNull(store.Get("win-01"));
+    }
+
+    [Fact]
     public void Rejects_Bad_Body()
     {
         var store = new SnapshotStore();
@@ -104,7 +136,7 @@ public class LxHubTests
 
         var (code, _) = Send(HttpMethod.Post, hub.ReportUrl, "garbage !!!", null);
 
-        Assert.Equal(400, code);
+        Assert.Equal(422, code);
     }
 
     [Fact]
