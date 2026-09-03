@@ -27,6 +27,7 @@ internal static class Program
 
     private static IAudioEndpointService? _audio;
     private static SystemMetricsCollector? _metrics;
+    private static SystemProxyService? _proxy;
     private static LxHub? _hub;
     private static SnapshotStore? _store;
     private static readonly object Gate = new();
@@ -91,40 +92,33 @@ internal static class Program
 
     private static async Task<string?> ReadLineLimitedAsync(TextReader reader, int maxLength)
     {
-        var buffer = new char[1024];
         var line = new StringBuilder(Math.Min(maxLength, 4096));
+        var oneChar = new char[1];
         var readAny = false;
-        var tooLong = false;
 
         while (true)
         {
-            var count = await reader.ReadAsync(buffer.AsMemory());
+            var count = await reader.ReadAsync(oneChar.AsMemory(0, 1));
             if (count == 0)
             {
                 if (!readAny) return null;
-                if (tooLong) throw new ProtocolException("request_too_large", "request exceeds size limit");
+                if (line.Length > maxLength)
+                    throw new ProtocolException("request_too_large", "request exceeds size limit");
                 return line.ToString().TrimEnd('\r');
             }
 
             readAny = true;
-            for (var i = 0; i < count; i++)
+            var c = oneChar[0];
+            if (c == '\n')
             {
-                var c = buffer[i];
-                if (c == '\n')
-                {
-                    if (tooLong) throw new ProtocolException("request_too_large", "request exceeds size limit");
-                    return line.ToString().TrimEnd('\r');
-                }
-
-                if (line.Length >= maxLength)
-                {
-                    tooLong = true;
-                }
-                else if (!tooLong)
-                {
-                    line.Append(c);
-                }
+                if (line.Length > maxLength)
+                    throw new ProtocolException("request_too_large", "request exceeds size limit");
+                return line.ToString().TrimEnd('\r');
             }
+
+            // Keep one extra character so an oversized line is rejected without
+            // retaining an unbounded request in memory.
+            if (line.Length <= maxLength) line.Append(c);
         }
     }
 
@@ -154,6 +148,7 @@ internal static class Program
                 {
                     "audio.list", "audio.default", "audio.setDefault", "metrics.snapshot",
                     "hub.start", "hub.stop", "hub.listMachines", "hub.getMachine",
+                    "net.proxyState", "net.repairProxy",
                 },
             })),
             "audio.list" => Task.FromResult(AudioList(request)),
@@ -164,6 +159,8 @@ internal static class Program
             "hub.stop" => Task.FromResult(HubStop(request)),
             "hub.listMachines" => Task.FromResult(HubListMachines(request)),
             "hub.getMachine" => Task.FromResult(HubGetMachine(request)),
+            "net.proxyState" => ProxyState(request),
+            "net.repairProxy" => RepairProxy(request),
             _ => Task.FromResult(Response.Failure(request.Id, "unknown_method", "Unknown method")),
         };
     }
@@ -304,6 +301,33 @@ internal static class Program
             snapshot = entry.Snapshot,
         });
         return Response.Success(request.Id, new { machines, truncated = store.GetAll(65).Count > 64 });
+    }
+
+    private static async Task<Response> ProxyState(Request request)
+    {
+        try
+        {
+            _proxy ??= new SystemProxyService();
+            return Response.Success(request.Id, await _proxy.ReadAsync());
+        }
+        catch (Exception ex)
+        {
+            return Response.Failure(request.Id, "proxy_diagnose_failed", PublicError(ex));
+        }
+    }
+
+    private static async Task<Response> RepairProxy(Request request)
+    {
+        try
+        {
+            _proxy ??= new SystemProxyService();
+            var resetWinHttp = OptionalBool(request.Parameters, "resetWinhttp") ?? false;
+            return Response.Success(request.Id, await _proxy.RepairAsync(resetWinHttp));
+        }
+        catch (Exception ex)
+        {
+            return Response.Failure(request.Id, "proxy_repair_failed", PublicError(ex));
+        }
     }
 
     private static Response HubGetMachine(Request request)
