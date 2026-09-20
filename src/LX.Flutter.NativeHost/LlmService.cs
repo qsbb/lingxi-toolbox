@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Management;
+using System.Text;
 
 namespace LingXi.Flutter.NativeHost;
 
@@ -14,6 +16,88 @@ internal static class LlmService
     internal const string TaskFn = "llama_fn";
     private const string ServerImage = "llama-server";
     private static readonly string[] KnownTasks = { TaskSrv, TaskFn };
+
+    /// <summary>
+    /// 只读探测：从运行中的 llama-server.exe 进程命令行解析连接信息
+    /// （host/port/api-key/别名/模型路径），供 Flutter 侧"一键配置"。
+    /// </summary>
+    internal static object Detect()
+    {
+        string? commandLine = null;
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT CommandLine FROM Win32_Process WHERE Name = 'llama-server.exe'");
+            foreach (var item in searcher.Get())
+            {
+                commandLine = item["CommandLine"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(commandLine)) break;
+            }
+        }
+        catch
+        {
+            // WMI 不可用视为未检测到，不抛错。
+        }
+
+        if (string.IsNullOrWhiteSpace(commandLine)) return new { found = false };
+
+        var tokens = Tokenize(commandLine);
+        var portRaw = ExtractValue(tokens, "--port") ?? "8080";
+        var port = int.TryParse(portRaw, out var p) && p is > 0 and <= 65535 ? p : 8080;
+        var hostRaw = ExtractValue(tokens, "--host") ?? "127.0.0.1";
+        // 0.0.0.0 / :: 是监听语义，客户端连接要用回环地址。
+        var host = hostRaw is "0.0.0.0" or "::" or "" ? "127.0.0.1" : hostRaw;
+        return new
+        {
+            found = true,
+            baseUrl = $"http://{host}:{port}/v1",
+            apiKey = ExtractValue(tokens, "--api-key") ?? string.Empty,
+            alias = ExtractValue(tokens, "-a") ?? string.Empty,
+            modelPath = ExtractValue(tokens, "-m") ?? string.Empty,
+        };
+    }
+
+    private static List<string> Tokenize(string commandLine)
+    {
+        var tokens = new List<string>();
+        var current = new StringBuilder();
+        var inQuotes = false;
+        foreach (var c in commandLine)
+        {
+            if (c == '"')
+            {
+                inQuotes = !inQuotes;
+                continue;
+            }
+            if (char.IsWhiteSpace(c) && !inQuotes)
+            {
+                if (current.Length > 0)
+                {
+                    tokens.Add(current.ToString());
+                    current.Clear();
+                }
+                continue;
+            }
+            current.Append(c);
+        }
+        if (current.Length > 0) tokens.Add(current.ToString());
+        return tokens;
+    }
+
+    private static string? ExtractValue(List<string> tokens, string flag)
+    {
+        for (var i = 0; i < tokens.Count - 1; i++)
+        {
+            if (tokens[i] == flag) return tokens[i + 1];
+        }
+        var prefix = flag + "=";
+        foreach (var token in tokens)
+        {
+            if (token.StartsWith(prefix, StringComparison.Ordinal))
+                return token[prefix.Length..];
+        }
+        return null;
+    }
 
     internal static object State()
     {
