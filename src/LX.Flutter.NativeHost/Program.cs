@@ -149,6 +149,7 @@ internal static class Program
                     "audio.list", "audio.default", "audio.setDefault", "metrics.snapshot",
                     "hub.start", "hub.stop", "hub.listMachines", "hub.getMachine",
                     "net.proxyState", "net.repairProxy",
+                    "llm.state", "llm.switch",
                 },
             })),
             "audio.list" => Task.FromResult(AudioList(request)),
@@ -161,6 +162,8 @@ internal static class Program
             "hub.getMachine" => Task.FromResult(HubGetMachine(request)),
             "net.proxyState" => ProxyState(request),
             "net.repairProxy" => RepairProxy(request),
+            "llm.state" => Task.FromResult(LlmState(request)),
+            "llm.switch" => Task.FromResult(LlmSwitch(request)),
             _ => Task.FromResult(Response.Failure(request.Id, "unknown_method", "Unknown method")),
         };
     }
@@ -327,6 +330,33 @@ internal static class Program
         catch (Exception ex)
         {
             return Response.Failure(request.Id, "proxy_repair_failed", PublicError(ex));
+        }
+    }
+
+    private static Response LlmState(Request request)
+    {
+        try
+        {
+            return Response.Success(request.Id, LlmService.State());
+        }
+        catch (Exception ex)
+        {
+            return Response.Failure(request.Id, "llm_state_failed", PublicError(ex));
+        }
+    }
+
+    private static Response LlmSwitch(Request request)
+    {
+        try
+        {
+            var action = Required(request.Parameters, "action", 16)
+                .Trim().ToLowerInvariant();
+            var task = Optional(request.Parameters, "task")?.Trim();
+            return Response.Success(request.Id, LlmService.Execute(action, task));
+        }
+        catch (Exception ex)
+        {
+            return Response.Failure(request.Id, ErrorCode(ex), PublicError(ex));
         }
     }
 
