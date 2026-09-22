@@ -56,6 +56,12 @@ public sealed class SnapshotGpu
     [JsonPropertyName("memUsed")] public double? MemUsed { get; set; }
     [JsonPropertyName("memTotal")] public double? MemTotal { get; set; }
     [JsonPropertyName("power")] public double? Power { get; set; }
+
+    /// <summary>
+    /// 该显卡能否可靠读取动态指标（占用率等）。
+    /// false = 系统/驱动未暴露（如部分核显），UI 应显示"不可读"而不是留白或伪造。
+    /// </summary>
+    [JsonPropertyName("readable")] public bool? Readable { get; set; }
 }
 
 public sealed class SnapshotMem

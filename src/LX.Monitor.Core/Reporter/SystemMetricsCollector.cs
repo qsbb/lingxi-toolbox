@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Management;
 using System.Net.NetworkInformation;
 
@@ -18,6 +19,7 @@ public sealed class SystemMetricsCollector
     private DateTime _lastNetSample = DateTime.MinValue;
     private (string Model, int Cores)? _cpuInfo;
     private (double Used, double Total, double? Available)? _memInfo;
+    private List<SnapshotGpu> _nvidiaGpus = new();
     private DateTime _lastStaticAt = DateTime.MinValue;
 
     public string MachineName { get; set; } = Environment.MachineName;
@@ -56,6 +58,7 @@ public sealed class SystemMetricsCollector
         {
             _cpuInfo = QueryCpuInfo();
             _memInfo = QueryMemory();
+            _nvidiaGpus = QueryNvidiaSmiGpus();
             _lastStaticAt = now;
         }
 
@@ -85,7 +88,7 @@ public sealed class SystemMetricsCollector
                 Temp = QueryCpuTemp(),
                 Power = null,
             },
-            Gpus = QueryGpus(),
+            Gpus = QueryGpus(_nvidiaGpus),
             Mem = new SnapshotMem
             {
                 Used = Math.Round(mem.Total - mem.Used, 1),
@@ -311,20 +314,65 @@ public sealed class SystemMetricsCollector
         return null;
     }
 
-    private static List<SnapshotGpu> QueryGpus()
+    /// <summary>
+    /// GPU 采集：nvidia-smi 优先（占用率/温度/显存/功耗），其余走 WMI + 性能计数器兜底。
+    /// 注意 Win32_VideoController.AdapterRAM 是 32 位字段，显存 ≥4GB 会被截断成
+    /// 2^32-1（表现为恒为 4.0GB），因此该值只作"有无显存"判断，绝不采信具体数值。
+    /// 虚拟显示适配器（串流/模拟器/AR）不参与上报。
+    /// </summary>
+    private static List<SnapshotGpu> QueryGpus(List<SnapshotGpu> nvidiaGpus)
     {
         var result = new List<SnapshotGpu>();
+        var usedNvidia = new bool[nvidiaGpus.Count];
         try
         {
             using var searcher = new ManagementObjectSearcher("SELECT Name, AdapterRAM FROM Win32_VideoController");
             foreach (var obj in searcher.Get())
             {
-                var ram = Convert.ToDouble(obj["AdapterRAM"] ?? 0) / 1024 / 1024 / 1024;
-                result.Add(new SnapshotGpu
+                var name = obj["Name"]?.ToString()?.Trim() ?? "";
+                if (name.Length == 0) continue;
+
+                var ramRaw = Convert.ToDouble(obj["AdapterRAM"] ?? 0);
+                double? ram = IsBogusAdapterRam(ramRaw) || ramRaw <= 0
+                    ? null
+                    : Math.Round(ramRaw / 1024 / 1024 / 1024, 1);
+
+                // 与 nvidia-smi 结果合并（NVIDIA 卡拿到精确值）
+                var matchIndex = -1;
+                for (var i = 0; i < nvidiaGpus.Count; i++)
                 {
-                    Model = obj["Name"]?.ToString(),
-                    MemTotal = Math.Round(ram, 1),
-                });
+                    if (usedNvidia[i]) continue;
+                    var target = nvidiaGpus[i].Model ?? "";
+                    if (target.Length > 0 &&
+                        (name.Contains(target, StringComparison.OrdinalIgnoreCase) ||
+                         target.Contains(name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        matchIndex = i;
+                        break;
+                    }
+                }
+
+                if (matchIndex >= 0)
+                {
+                    usedNvidia[matchIndex] = true;
+                    var nv = nvidiaGpus[matchIndex];
+                    result.Add(new SnapshotGpu
+                    {
+                        Model = name,
+                        Usage = nv.Usage,
+                        Temp = nv.Temp,
+                        MemUsed = nv.MemUsed,
+                        MemTotal = nv.MemTotal ?? ram,
+                        Power = nv.Power,
+                        Readable = true, // nvidia-smi 提供精确指标
+                    });
+                    continue;
+                }
+
+                // 虚拟/不可用适配器（串流/模拟器/AR）不参与上报
+                if (IsVirtualDisplayAdapter(name)) continue;
+
+                result.Add(new SnapshotGpu { Model = name, MemTotal = ram, Readable = false });
             }
         }
         catch
@@ -332,71 +380,180 @@ public sealed class SystemMetricsCollector
             // 降级
         }
 
-        // GPU 占用率：Windows 10+ 通用方案（不挑厂商）——
-        // "GPU Engine" 性能计数器按引擎分片，聚合成每卡最大引擎占用率
-        //（对齐 servermonitor《Windows-GPU占用率修复说明》的扩展方向）。
-        var usageByGpu = QueryGpuEngineUsage();
-        if (usageByGpu.Count > 0)
+        // nvidia-smi 报告但 WMI 未列出的卡（少见）
+        for (var i = 0; i < nvidiaGpus.Count; i++)
         {
-            var usages = usageByGpu.Values.ToList();
-            if (result.Count == 1)
+            if (!usedNvidia[i]) result.Add(nvidiaGpus[i]);
+        }
+
+        // GPU 占用率兜底：性能计数器按 LUID 聚合（多显卡机器上比 phys_N 序号可靠）。
+        // 核显/独显并存时 phys_0 会重复，只有 LUID 能唯一对上适配器。
+        // 只有 LUID 精确映射到适配器才采信占用率；映射不到就标注不可读，
+        // 绝不用序号猜测（多显卡机器上会张冠李戴）。
+        var usageByLuid = QueryGpuEngineUsage();
+        if (usageByLuid.Count > 0)
+        {
+            var byDescription = QueryAdapterDescriptionsByLuid();
+            foreach (var gpu in result)
             {
-                result[0].Usage = usages.Max();
-            }
-            else
-            {
-                // 多卡：按 phys_N 序号对齐 WMI 列表顺序
-                for (var i = 0; i < result.Count; i++)
+                if (gpu.Usage is not null) continue; // nvidia-smi 已给精确值
+                var model = gpu.Model ?? "";
+                foreach (var (luid, description) in byDescription)
                 {
-                    if (usageByGpu.TryGetValue(i.ToString(), out var u))
+                    if (!NamesLikelyMatch(model, description)) continue;
+                    if (usageByLuid.TryGetValue(luid, out var exact))
                     {
-                        result[i].Usage = u;
+                        gpu.Usage = exact;
+                        gpu.Readable = true;
                     }
+                    break;
                 }
             }
+        }
+
+        // 仍未拿到占用率且非 nvidia-smi 的显卡：明确标记不可读
+        foreach (var gpu in result)
+        {
+            gpu.Readable ??= gpu.Usage is not null;
         }
         return result;
     }
 
     /// <summary>
-    /// GPU 引擎占用率采集（Windows 10+ "GPU Engine" 计数器族）：
-    /// 每个物理 GPU 在实例名 "phys_N_eng_..." 下挂多个引擎（3D/Copy/VideoDecode…），
-    /// 取每卡全部引擎 Utilization Percentage 的最大值作为该卡占用率。
-    /// 计数器缺失（旧系统/无权限）返回空字典，调用方保持 usage=null 不伪造。
+    /// 调 nvidia-smi 取精确 GPU 指标（不依赖厂商 SDK；非 NVIDIA 机器直接返回空）。
+    /// 字段不可得（如被动散热卡无风扇/功耗）保持 null，不伪造。
+    /// </summary>
+    private static List<SnapshotGpu> QueryNvidiaSmiGpus()
+    {
+        var result = new List<SnapshotGpu>();
+        try
+        {
+            var exe = Path.Combine(Environment.SystemDirectory, "nvidia-smi.exe");
+            if (!File.Exists(exe)) return result;
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = exe,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            psi.ArgumentList.Add("--query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw");
+            psi.ArgumentList.Add("--format=csv,noheader");
+            using var process = Process.Start(psi);
+            if (process is null) return result;
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(8000);
+
+            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var parts = line.Split(',');
+                if (parts.Length < 6) continue;
+                var name = parts[0].Trim();
+                if (name.Length == 0) continue;
+                result.Add(new SnapshotGpu
+                {
+                    Model = name,
+                    Usage = ParseNvidiaNumber(parts[1]),
+                    Temp = ParseNvidiaNumber(parts[2]),
+                    MemUsed = ParseMibNumber(parts[3]),
+                    MemTotal = ParseMibNumber(parts[4]),
+                    Power = ParseNvidiaNumber(parts[5]),
+                });
+            }
+        }
+        catch
+        {
+            // nvidia-smi 缺失/超时：交给 WMI + 性能计数器兜底
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// AdapterRAM 是 32 位字段：显存 ≥4GiB 的卡会被 WMI 截断成 0xFFFFFFxx 区间
+    /// （实测 RTX 4070 12GB 返回 4293918720）。命中该区间一律视为不可信。
+    /// </summary>
+    internal static bool IsBogusAdapterRam(double bytes) =>
+        bytes >= 4.0 * 1024 * 1024 * 1024 - 1024 * 1024;
+
+    /// <summary>虚拟显示适配器（串流/模拟器/VR）判定：这类"显卡"没有真实显存与占用率。</summary>
+    internal static bool IsVirtualDisplayAdapter(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return true;
+        var isKnownVendor =
+            name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("AMD", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("Radeon", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("Intel", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("Arc", StringComparison.OrdinalIgnoreCase);
+        if (isKnownVendor) return false;
+
+        foreach (var marker in VirtualAdapterMarkers)
+        {
+            if (name.Contains(marker, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    private static readonly string[] VirtualAdapterMarkers =
+    {
+        "Virtual", "Virtio", "VMware", "VirtualBox", "Hyper-V", "Microsoft Basic",
+        "GameViewer", "MuMu", "Meta Virtual", "Zako", "Sunshine", "Parsec",
+        "DameWare", "DisplayLink", "USB Display",
+    };
+
+    /// <summary>
+    /// 解析 nvidia-smi 的数值字段。注意中文区域下 nvidia-smi 会用逗号作小数点
+    ///（"35,03 W"），必须两种小数点都接受，否则功耗永远是 null。
+    /// </summary>
+    internal static double? ParseNvidiaNumber(string raw)
+    {
+        var text = raw.Trim().TrimEnd('%').Trim();
+        if (text.Length == 0 || text.Equals("N/A", StringComparison.OrdinalIgnoreCase)) return null;
+
+        // 取前导数字（含 . 或 , 小数），丢弃单位（W / C / MiB / %）
+        var end = 0;
+        while (end < text.Length && (char.IsDigit(text[end]) || text[end] is '.' or ',' or '-' or '+'))
+        {
+            end++;
+        }
+        if (end == 0) return null;
+        var numeric = text[..end].Replace(',', '.');
+        return double.TryParse(numeric, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            ? Math.Round(value, 1)
+            : null;
+    }
+
+    /// <summary>MiB → GiB（nvidia-smi 的 memory.* 单位是 MiB）。</summary>
+    internal static double? ParseMibNumber(string raw)
+    {
+        var mib = ParseNvidiaNumber(raw);
+        return mib is null ? null : Math.Round(mib.Value / 1024, 1);
+    }
+
+    /// <summary>
+    /// 性能计数器 GPU Engine 按适配器 LUID 聚合占用率（取各引擎实例的最大值）。
+    /// instance 形如 pid_1234_luid_0x00000000_0x00014fc6_phys_0_eng_2_engtype_3D。
     /// </summary>
     private static Dictionary<string, double> QueryGpuEngineUsage()
     {
-        var byGpu = new Dictionary<string, double>();
+        var byLuid = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         try
         {
             var category = new PerformanceCounterCategory("GPU Engine");
             foreach (var instance in category.GetInstanceNames())
             {
-                var marker = "phys_";
-                var idx = instance.IndexOf(marker, StringComparison.Ordinal);
-                if (idx < 0)
-                {
-                    continue;
-                }
-                var rest = instance[(idx + marker.Length)..];
-                var gpuId = rest.Contains('_') ? rest[..rest.IndexOf('_')] : rest;
+                var luid = ExtractLuid(instance);
+                if (luid is null) continue;
 
                 using var counter = new PerformanceCounter("GPU Engine", "Utilization Percentage", instance, readOnly: true);
                 var value = Math.Round(counter.NextValue(), 1);
-                if (value <= 0)
+                if (value <= 0) continue;
+
+                if (!byLuid.TryGetValue(luid, out var current) || value > current)
                 {
-                    continue;
-                }
-                if (byGpu.TryGetValue(gpuId, out var current))
-                {
-                    if (value > current)
-                    {
-                        byGpu[gpuId] = value;
-                    }
-                }
-                else
-                {
-                    byGpu[gpuId] = value;
+                    byLuid[luid] = value;
                 }
             }
         }
@@ -404,6 +561,77 @@ public sealed class SystemMetricsCollector
         {
             // 计数器不可用 → 保持空，不伪造
         }
-        return byGpu;
+        return byLuid;
+    }
+
+    /// <summary>从 GPU Engine 实例名提取 LUID（低 32 位十六进制，与注册表 AdapterLuidLowPart 对齐）。</summary>
+    internal static string? ExtractLuid(string instanceName)
+    {
+        var marker = "_luid_0x";
+        var start = instanceName.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (start < 0) return null;
+        var rest = instanceName[(start + marker.Length)..];
+
+        var underscore = rest.IndexOf('_');
+        if (underscore < 0) return null;
+        var high = rest[..underscore];
+        rest = rest[(underscore + 1)..];
+        if (!rest.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) return null;
+
+        var end = rest.IndexOf('_', 2);
+        var low = end < 0 ? rest : rest[..end];
+        return $"0x{high.ToLowerInvariant()}_{low.ToLowerInvariant()}";
+    }
+
+    /// <summary>
+    /// 读取 HKLM\SYSTEM\CurrentControlSet\Control\Video\*\0000 的 DirectX 适配器：
+    /// 得到 LUID → 驱动描述（AdapterString）的映射，用于与 WMI 显卡名对位。
+    /// </summary>
+    private static Dictionary<string, string> QueryAdapterDescriptionsByLuid()
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var video = Microsoft.Win32.Registry.LocalMachine
+                .OpenSubKey("SYSTEM\\CurrentControlSet\\Control\\Video");
+            if (video is null) return map;
+
+            foreach (var guidKeyName in video.GetSubKeyNames())
+            {
+                using var guidKey = video.OpenSubKey(guidKeyName);
+                using var adapterKey = guidKey?.OpenSubKey("0000");
+                if (adapterKey is null) continue;
+
+                var description = adapterKey.GetValue("HardwareInformation.AdapterString") as string;
+                var low = adapterKey.GetValue("HardwareInformation.AdapterLuidLowPart");
+                var high = adapterKey.GetValue("HardwareInformation.AdapterLuidHighPart");
+                if (string.IsNullOrWhiteSpace(description) || low is null) continue;
+
+                var highValue = Convert.ToInt64(high ?? 0);
+                var lowValue = Convert.ToInt64(low);
+                map[$"0x{highValue:x8}_0x{lowValue:x8}"] = description.Trim();
+            }
+        }
+        catch
+        {
+            // 注册表不可读 → 只走序号退路
+        }
+        return map;
+    }
+
+    /// <summary>显卡名与驱动描述模糊匹配（"AMD Radeon(TM) Graphics" vs "AMD Radeon(TM) Graphics"）。</summary>
+    internal static bool NamesLikelyMatch(string adapterName, string description)
+    {
+        static string Normalize(string value) => value
+            .Replace("(TM)", "", StringComparison.OrdinalIgnoreCase)
+            .Replace("(R)", "", StringComparison.OrdinalIgnoreCase)
+            .Replace("  ", " ")
+            .Trim();
+
+        if (string.IsNullOrWhiteSpace(adapterName) || string.IsNullOrWhiteSpace(description)) return false;
+        var a = Normalize(adapterName);
+        var b = Normalize(description);
+        return a.Contains(b, StringComparison.OrdinalIgnoreCase)
+            || b.Contains(a, StringComparison.OrdinalIgnoreCase);
     }
 }

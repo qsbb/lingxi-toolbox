@@ -12,4 +12,7 @@
     <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="8.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="LX.Monitor.Core.Tests" />
+  </ItemGroup>
 </Project>
