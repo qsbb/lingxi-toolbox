@@ -1,3 +1,4 @@
+using System.Text.Json;
 using LingXi.Monitor.Core;
 using Xunit;
 
@@ -52,6 +53,30 @@ public class SnapshotContractTests
     {
         Assert.Null(SnapshotJson.Parse("not json at all"));
         Assert.Null(SnapshotJson.Parse(""));
+    }
+
+    [Fact]
+    public void Available_Memory_Round_Trips_And_Null_Stays_Absent()
+    {
+        // 适配文档第 5 节：mem.available 为可选字段，服务端按 total-available 计算内存压力。
+        var withAvailable = new Snapshot
+        {
+            Version = 1,
+            Name = "probe",
+            Mem = new SnapshotMem { Used = 8.2, Total = 16, Available = 7.8 },
+        };
+        var json = JsonSerializer.Serialize(withAvailable, SnapshotJson.Options);
+        Assert.Contains("\"available\":7.8", json);
+
+        // 拿不到可信值时必须是 null 而不是反推值
+        var withoutAvailable = new Snapshot
+        {
+            Version = 1,
+            Name = "probe",
+            Mem = new SnapshotMem { Used = 8.2, Total = 16 },
+        };
+        var parsed = SnapshotJson.Parse(JsonSerializer.Serialize(withoutAvailable, SnapshotJson.Options));
+        Assert.Null(parsed!.Mem?.Available);
     }
 
     [Fact]

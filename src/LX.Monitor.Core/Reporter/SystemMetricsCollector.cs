@@ -17,7 +17,7 @@ public sealed class SystemMetricsCollector
     private ulong _lastRx, _lastTx;
     private DateTime _lastNetSample = DateTime.MinValue;
     private (string Model, int Cores)? _cpuInfo;
-    private (double Used, double Total)? _memInfo;
+    private (double Used, double Total, double? Available)? _memInfo;
     private DateTime _lastStaticAt = DateTime.MinValue;
 
     public string MachineName { get; set; } = Environment.MachineName;
@@ -60,7 +60,7 @@ public sealed class SystemMetricsCollector
         }
 
         var cpuUsage = GetCpuUsage();
-        var mem = _memInfo ?? (0, 0);
+        var mem = _memInfo ?? (0, 0, null);
         var net = GetNetwork();
 
         var snap = new Snapshot
@@ -70,7 +70,7 @@ public sealed class SystemMetricsCollector
             AgentTs = DateTimeOffset.Now.ToUnixTimeMilliseconds(),
             Os = new SnapshotOs
             {
-                Platform = "win32",
+                Platform = "windows",
                 Distro = QueryWindowsName(),
                 Release = Environment.OSVersion.VersionString,
                 Arch = Environment.Is64BitOperatingSystem ? "x64" : "x86",
@@ -90,6 +90,7 @@ public sealed class SystemMetricsCollector
             {
                 Used = Math.Round(mem.Total - mem.Used, 1),
                 Total = Math.Round(mem.Total, 1),
+                Available = mem.Available is { } available ? Math.Round(available, 1) : null,
                 SwapUsed = null,
                 SwapTotal = null,
             },
@@ -126,23 +127,66 @@ public sealed class SystemMetricsCollector
         return (Environment.ProcessorCount + " cores", Environment.ProcessorCount);
     }
 
-    private (double Used, double Total) QueryMemory()
+    private (double Used, double Total, double? Available) QueryMemory()
     {
         try
         {
-            using var searcher = new ManagementObjectSearcher("SELECT TotalVisibleMemorySize, FreePhysicalMemory FROM Win32_OperatingSystem");
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT TotalVisibleMemorySize, FreePhysicalMemory FROM Win32_OperatingSystem");
             foreach (var obj in searcher.Get())
             {
                 var total = Convert.ToDouble(obj["TotalVisibleMemorySize"]) / 1024 / 1024; // KB→GiB
                 var free = Convert.ToDouble(obj["FreePhysicalMemory"]) / 1024 / 1024;
-                return (total - free, total);
+
+                // available 必须对应"可立即供新进程使用"的语义（服务器按 total-available
+                // 计算内存压力）。取不到就传 null，绝不用 total-used 反推（会把 page cache
+                // 重新包装成新字段，误导服务端）。
+                double? available = TryPerfFormattedAvailableGiB() ?? TryPerformanceCounterGiB();
+                return (total - free, total, available);
             }
         }
         catch
         {
             // 降级
         }
-        return (0, 0);
+        return (0, 0, null);
+    }
+
+    /// <summary>
+    /// 首选 Win32_PerfFormattedData_PerfOS_Memory.AvailableMBytes：与任务管理器"可用内存"
+    /// 同源；Win32_OperatingSystem.AvailableKBytes 在 Win10/11 上已废弃恒为 0，不能用。
+    /// </summary>
+    private static double? TryPerfFormattedAvailableGiB()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT AvailableMBytes FROM Win32_PerfFormattedData_PerfOS_Memory");
+            foreach (var obj in searcher.Get())
+            {
+                var mb = Convert.ToDouble(obj["AvailableMBytes"]);
+                return mb <= 0 ? null : mb / 1024;
+            }
+        }
+        catch
+        {
+            // 降级到性能计数器
+        }
+        return null;
+    }
+
+    private double? TryPerformanceCounterGiB()
+    {
+        try
+        {
+            _memAvailCounter ??= new PerformanceCounter("Memory", "Available Bytes");
+            var bytes = _memAvailCounter.NextValue();
+            return bytes <= 0 ? null : bytes / 1024 / 1024 / 1024;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private double GetCpuUsage()

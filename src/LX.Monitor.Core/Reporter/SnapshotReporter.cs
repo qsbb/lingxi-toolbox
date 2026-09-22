@@ -79,7 +79,7 @@ public sealed class SnapshotReporter : IDisposable
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
             using var request = new HttpRequestMessage(HttpMethod.Post, _target.Url) { Content = content };
             request.Headers.TryAddWithoutValidation("X-SM-Token", _target.Token);
-            request.Headers.TryAddWithoutValidation("User-Agent", "lingxi-toolbox/1.0");
+            request.Headers.TryAddWithoutValidation("User-Agent", "lingxi-toolbox/2.1");
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
             cts.CancelAfter(Math.Max(1000, _target.TimeoutMs));

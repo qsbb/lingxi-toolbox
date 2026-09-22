@@ -62,6 +62,10 @@ public sealed class SnapshotMem
 {
     [JsonPropertyName("used")] public double? Used { get; set; }
     [JsonPropertyName("total")] public double? Total { get; set; }
+
+    /// <summary>可立即供新进程使用的估计内存（GB）。不可信时传 null，不要用 total-used 反推。</summary>
+    [JsonPropertyName("available")] public double? Available { get; set; }
+
     [JsonPropertyName("swapUsed")] public double? SwapUsed { get; set; }
     [JsonPropertyName("swapTotal")] public double? SwapTotal { get; set; }
 }
