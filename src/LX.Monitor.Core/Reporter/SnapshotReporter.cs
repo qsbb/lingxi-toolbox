@@ -85,15 +85,25 @@ public sealed class SnapshotReporter : IDisposable
             cts.CancelAfter(Math.Max(1000, _target.TimeoutMs));
 
             using var response = await Http.SendAsync(request, cts.Token);
+            var status = (int)response.StatusCode;
+            var body = await ReadBodyAsync(response, cts.Token);
             sw.Stop();
 
             if (response.IsSuccessStatusCode)
             {
-                Reported?.Invoke(sw.Elapsed);
-                // 202 = 独立 token 首次上报：已入待绑定队列，需在 Yunzai 主人私聊发送绑定命令
-                if ((int)response.StatusCode == 202)
+                // 契约：2xx 也必须返回 JSON 且 ok:true，空 body / 非 JSON 一律视为失败
+                // ——宁可报错也不要"假成功"（服务端可能根本没入库）。
+                if (!IsOkTrue(body))
                 {
-                    Log?.Invoke($"[{_target.Url}] 首次上报已受理（HTTP 202 待绑定）：请在 Yunzai 主人私聊发送 #服务器状态待绑定 查看绑定命令");
+                    Log?.Invoke($"[{_target.Url}] 上报失败：HTTP {status} 但响应不是 ok:true（body 缺失或格式不符）");
+                    return (false, sw.Elapsed);
+                }
+
+                Reported?.Invoke(sw.Elapsed);
+                // 202 = 待绑定（未登记的独立 token 首次上报）
+                if (status == 202 || IsPending(body))
+                {
+                    Log?.Invoke($"[{_target.Url}] 首次上报已受理（待绑定）：请在机器人主人私聊发送 #服务器状态待绑定 取回绑定命令");
                     BindPending?.Invoke(_target.Url);
                 }
                 else
@@ -103,17 +113,20 @@ public sealed class SnapshotReporter : IDisposable
                 return (true, sw.Elapsed);
             }
 
-            var msg = $"[{_target.Url}] 上报失败 HTTP {(int)response.StatusCode}";
-            // 常见错误码语义速查（适配文档第 7 节）
-            msg += (int)response.StatusCode switch
+            var msg = $"[{_target.Url}] 上报失败 HTTP {status}";
+            // 错误码语义（对齐服务端 0.1.19+ 行为）
+            msg += status switch
             {
-                401 => "（token 无效或未绑定）",
+                401 => "（token 无效：未绑定 / 格式不符 / 旧共享 token 已停用）",
                 403 => "（name 与已有机器冲突，请改名）",
-                413 => "（请求体超 256KB）",
-                422 => "（结构/空快照/数值非法）",
-                429 => "（限速：单 token 60 次/分）",
+                413 => "（请求体超限：宿主全局 JSON 上限 100 KB 先生效，插件上限 256 KB）",
+                422 => "（结构错 / 空快照 / 数值非法）",
+                429 => "（限速或待绑定队列已满：单 IP 每分钟最多创建 10 条 pending）",
+                503 => "（服务端上报入口已关闭：report_enabled=false）",
                 _ => "",
             };
+            var serverMsg = ExtractServerMessage(body);
+            if (serverMsg.Length > 0) msg += $" · {serverMsg}";
             Log?.Invoke(msg);
             return (false, sw.Elapsed);
         }
@@ -127,6 +140,84 @@ public sealed class SnapshotReporter : IDisposable
             Log?.Invoke($"[{_target.Url}] 上报异常: {ex.Message}");
             return (false, sw.Elapsed);
         }
+    }
+
+    /// <summary>读取响应体（上限 64 KiB，防止异常大响应拖垮上报循环）。</summary>
+    private static async Task<string> ReadBodyAsync(HttpResponseMessage response, CancellationToken token)
+    {
+        try
+        {
+            using var stream = await response.Content.ReadAsStreamAsync(token);
+            var buffer = new byte[8192];
+            using var ms = new MemoryStream();
+            var total = 0;
+            while (total < 64 * 1024)
+            {
+                var read = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), token);
+                if (read == 0) break;
+                ms.Write(buffer, 0, read);
+                total += read;
+            }
+            return Encoding.UTF8.GetString(ms.ToArray());
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>契约判定：响应必须是 JSON 对象且 ok:true。</summary>
+    internal static bool IsOkTrue(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("ok", out var ok)
+                && ok.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>body 里是否标记 pending（202 待绑定）。</summary>
+    internal static bool IsPending(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("pending", out var pending)
+                && pending.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>抽出服务端的 msg 字段用于诊断（如 "empty snapshot"）。</summary>
+    internal static string ExtractServerMessage(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return string.Empty;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return string.Empty;
+            if (doc.RootElement.TryGetProperty("msg", out var msg) && msg.ValueKind == JsonValueKind.String)
+            {
+                var text = msg.GetString() ?? string.Empty;
+                return text.Length > 120 ? text[..120] : text;
+            }
+        }
+        catch (JsonException)
+        {
+        }
+        return string.Empty;
     }
 
     public void Dispose()

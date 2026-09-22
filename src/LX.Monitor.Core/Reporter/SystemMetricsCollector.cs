@@ -224,7 +224,15 @@ public sealed class SystemMetricsCollector
                 _lastRx = (ulong)Math.Max(0, stats.BytesReceived);
                 _lastTx = (ulong)Math.Max(0, stats.BytesSent);
                 _lastNetSample = now;
-                return new SnapshotNet { Iface = iface.Name, RxSec = null, TxSec = null };
+                return new SnapshotNet
+                {
+                    Iface = iface.Name,
+                    RxSec = null,
+                    TxSec = null,
+                    // 首个采样点也带上累计流量（速率需要两次采样，累计量不需要）
+                    RxTotal = Math.Round(_lastRx / 1024.0 / 1024 / 1024, 1),
+                    TxTotal = Math.Round(_lastTx / 1024.0 / 1024 / 1024, 1),
+                };
             }
 
             var elapsed = (now - _lastNetSample).TotalSeconds;
@@ -244,6 +252,9 @@ public sealed class SystemMetricsCollector
                 Iface = iface.Name,
                 RxSec = Math.Round(rxSec, 2),
                 TxSec = Math.Round(txSec, 2),
+                // 累计流量（自网卡启动/计数器重置以来），单位 GB
+                RxTotal = Math.Round(_lastRx / 1024.0 / 1024 / 1024, 1),
+                TxTotal = Math.Round(_lastTx / 1024.0 / 1024 / 1024, 1),
             };
         }
         catch
