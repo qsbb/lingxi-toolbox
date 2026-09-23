@@ -18,7 +18,7 @@ public sealed class SystemMetricsCollector
     private ulong _lastRx, _lastTx;
     private DateTime _lastNetSample = DateTime.MinValue;
     private (string Model, int Cores)? _cpuInfo;
-    private (double Used, double Total, double? Available)? _memInfo;
+    private (double UsedPhysical, double Total, double? Available)? _memInfo;
     private List<SnapshotGpu> _nvidiaGpus = new();
     private DateTime _lastStaticAt = DateTime.MinValue;
 
@@ -64,6 +64,7 @@ public sealed class SystemMetricsCollector
 
         var cpuUsage = GetCpuUsage();
         var mem = _memInfo ?? (0, 0, null);
+        var memUsed = ResolveUsedGiB(mem.Total, mem.UsedPhysical, mem.Available);
         var net = GetNetwork();
 
         var snap = new Snapshot
@@ -91,7 +92,7 @@ public sealed class SystemMetricsCollector
             Gpus = QueryGpus(_nvidiaGpus),
             Mem = new SnapshotMem
             {
-                Used = Math.Round(mem.Total - mem.Used, 1),
+                Used = memUsed,
                 Total = Math.Round(mem.Total, 1),
                 Available = mem.Available is { } available ? Math.Round(available, 1) : null,
                 SwapUsed = null,
@@ -130,7 +131,27 @@ public sealed class SystemMetricsCollector
         return (Environment.ProcessorCount + " cores", Environment.ProcessorCount);
     }
 
-    private (double Used, double Total, double? Available) QueryMemory()
+    /// <summary>
+    /// 计算上报的 mem.used（GB）。
+    ///
+    /// 语义约定：有 available 时必须与它自洽（used + available = total），
+    /// 与服务端"total - available 计算内存压力"的算法一致；拿不到 available 才退回物理已用。
+    ///
+    /// 历史坑（2026-08-31 ~ 2026-09-23）：QueryMemory 返回的第一项本就是"已用"，
+    /// 这里又做了一次 total - used，等于把"空闲内存"当成 used 上报——
+    /// 12GB 机器上显示 76% 占用而真实只有 23%，且服务端回退分支与自研 UI 会一起被误导。
+    /// </summary>
+    internal static double? ResolveUsedGiB(double total, double usedPhysical, double? available)
+    {
+        if (total <= 0) return null;
+        if (available is { } avail)
+        {
+            return Math.Round(Math.Max(0, total - avail), 1);
+        }
+        return Math.Round(Math.Clamp(usedPhysical, 0, total), 1);
+    }
+
+    private (double UsedPhysical, double Total, double? Available) QueryMemory()
     {
         try
         {
@@ -145,6 +166,7 @@ public sealed class SystemMetricsCollector
                 // 计算内存压力）。取不到就传 null，绝不用 total-used 反推（会把 page cache
                 // 重新包装成新字段，误导服务端）。
                 double? available = TryPerfFormattedAvailableGiB() ?? TryPerformanceCounterGiB();
+                // UsedPhysical = 物理已用（total - 空闲）；available 单独给，勿混用
                 return (total - free, total, available);
             }
         }
