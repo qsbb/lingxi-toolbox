@@ -149,7 +149,7 @@ internal static class Program
                     "audio.list", "audio.default", "audio.setDefault", "metrics.snapshot",
                     "hub.start", "hub.stop", "hub.listMachines", "hub.getMachine",
                     "net.proxyState", "net.repairProxy",
-                    "llm.state", "llm.switch", "llm.detect",
+                    "llm.state", "llm.switch", "llm.detect", "llm.log",
                 },
             })),
             "audio.list" => Task.FromResult(AudioList(request)),
@@ -165,6 +165,7 @@ internal static class Program
             "llm.state" => Task.FromResult(LlmState(request)),
             "llm.switch" => Task.FromResult(LlmSwitch(request)),
             "llm.detect" => Task.FromResult(LlmDetect(request)),
+            "llm.log" => Task.FromResult(LlmLog(request)),
             _ => Task.FromResult(Response.Failure(request.Id, "unknown_method", "Unknown method")),
         };
     }
@@ -370,6 +371,18 @@ internal static class Program
         catch (Exception ex)
         {
             return Response.Failure(request.Id, "llm_detect_failed", PublicError(ex));
+        }
+    }
+
+    private static Response LlmLog(Request request)
+    {
+        try
+        {
+            return Response.Success(request.Id, LlmService.Log(OptionalInt(request.Parameters, "maxLines")));
+        }
+        catch (Exception ex)
+        {
+            return Response.Failure(request.Id, "llm_log_failed", PublicError(ex));
         }
     }
 

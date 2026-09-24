@@ -17,6 +17,13 @@ internal static class LlmService
     private const string ServerImage = "llama-server";
     private static readonly string[] KnownTasks = { TaskSrv, TaskFn };
 
+    /// <summary>llama-server 启动脚本固定把 stdout/stderr 重定向到这个文件。</summary>
+    private const string LogFileName = "server.log";
+    private const string FallbackLogPath = @"D:\AI\llamacpp\server.log";
+    private const int MaxLogBytes = 96 * 1024;
+    private const int DefaultMaxLogLines = 400;
+    private const int HardMaxLogLines = 2000;
+
     /// <summary>
     /// 只读探测：从运行中的 llama-server.exe 进程命令行解析连接信息
     /// （host/port/api-key/别名/模型路径），供 Flutter 侧"一键配置"。
@@ -209,6 +216,93 @@ internal static class LlmService
         {
             return new { cmd = fileName, ok = false, exitCode = -1 };
         }
+    }
+
+    /// <summary>
+    /// 读取模型服务日志尾部（只读）。路径优先从运行中的 llama-server.exe 所在目录推导，
+    /// 服务未运行时回退到默认部署路径，便于排查"启动失败/崩溃退出"。
+    /// </summary>
+    internal static object Log(int? maxLines)
+    {
+        var lines = maxLines is >= 1 and <= HardMaxLogLines ? maxLines.Value : DefaultMaxLogLines;
+        var path = ResolveLogPath();
+        if (!File.Exists(path))
+        {
+            return new
+            {
+                path,
+                exists = false,
+                running = ServerRunning(),
+                sizeBytes = 0L,
+                modifiedAt = (string?)null,
+                truncated = false,
+                lines = Array.Empty<string>(),
+            };
+        }
+
+        byte[] buffer;
+        long size;
+        DateTime modified;
+        bool bytesTruncated;
+        using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                   FileShare.ReadWrite | FileShare.Delete))
+        {
+            size = stream.Length;
+            modified = File.GetLastWriteTime(path);
+            var take = (int)Math.Min(size, MaxLogBytes);
+            bytesTruncated = take < size;
+            buffer = new byte[take];
+            var offset = 0;
+            if (take > 0)
+            {
+                stream.Seek(-take, SeekOrigin.End);
+                while (offset < take)
+                {
+                    var read = stream.Read(buffer, offset, take - offset);
+                    if (read <= 0) break;
+                    offset += read;
+                }
+            }
+            if (offset != buffer.Length) Array.Resize(ref buffer, offset);
+        }
+
+        // 尾部截断可能落在多字节字符中间，用替换字符兜底即可（只影响首行）。
+        var text = Encoding.UTF8.GetString(buffer).Replace("\r\n", "\n").Replace('\r', '\n');
+        var all = text.Split('\n');
+        var tail = all.Length > lines ? all[^lines..] : all;
+        return new
+        {
+            path,
+            exists = true,
+            running = ServerRunning(),
+            sizeBytes = size,
+            modifiedAt = modified.ToString("yyyy-MM-dd HH:mm:ss"),
+            truncated = bytesTruncated || all.Length > lines,
+            lines = tail,
+        };
+    }
+
+    private static string ResolveLogPath()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT ExecutablePath FROM Win32_Process WHERE Name = 'llama-server.exe'");
+            foreach (var item in searcher.Get())
+            {
+                var exe = item["ExecutablePath"]?.ToString();
+                if (string.IsNullOrWhiteSpace(exe)) continue;
+                var dir = Path.GetDirectoryName(exe);
+                if (string.IsNullOrWhiteSpace(dir)) continue;
+                var candidate = Path.Combine(dir, LogFileName);
+                if (File.Exists(candidate)) return candidate;
+            }
+        }
+        catch
+        {
+            // WMI 不可用时回退到默认路径。
+        }
+        return FallbackLogPath;
     }
 
     private static string QueryTaskState(string name)
