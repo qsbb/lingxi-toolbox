@@ -128,6 +128,7 @@ internal static class LlmService
         if (action != "stop" && !KnownTasks.Contains(task))
             throw new ArgumentException("Invalid task");
 
+        HostLog.Info($"llm.switch action={action} task={task ?? "-"}");
         var issued = new List<object>();
         if (action == "stop")
         {
@@ -135,7 +136,9 @@ internal static class LlmService
                 issued.Add(Run("schtasks.exe", "/end", "/tn", name));
             issued.Add(KillServer());
             WaitForServerExit(TimeSpan.FromSeconds(5));
-            return new { action, task = string.Empty, issued, stopped = !ServerRunning() };
+            var stopped = !ServerRunning();
+            HostLog.Info($"llm.switch stop finished: stopped={stopped}");
+            return new { action, task = string.Empty, issued, stopped };
         }
 
         var other = task == TaskSrv ? TaskFn : TaskSrv;
@@ -150,12 +153,14 @@ internal static class LlmService
         var started = WaitForTaskRunning(task!, TimeSpan.FromSeconds(8));
         if (!started)
         {
+            HostLog.Info($"task {task} 未进入 Running，清理后重试一次");
             issued.Add(Run("schtasks.exe", "/end", "/tn", task!));
             Thread.Sleep(1000);
             issued.Add(Run("schtasks.exe", "/run", "/tn", task!));
             started = WaitForTaskRunning(task!, TimeSpan.FromSeconds(8));
         }
 
+        HostLog.Info($"llm.switch {action} {task} finished: started={started}");
         return new { action, task = task ?? string.Empty, issued, started };
     }
 
@@ -198,22 +203,26 @@ internal static class LlmService
         };
         foreach (var arg in args) startInfo.ArgumentList.Add(arg);
 
+        var rendered = fileName + " " + string.Join(' ', args);
         try
         {
             using var process = Process.Start(startInfo)!;
             if (!process.WaitForExit(milliseconds: 15000))
             {
                 try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+                HostLog.Error($"timeout: {rendered}");
                 return new { cmd = fileName, ok = false, exitCode = -1 };
             }
 
             // taskkill 在进程不存在时返回 128，对幂等停止/切换而言视为成功。
             var ok = process.ExitCode == 0 ||
                      (fileName == "taskkill.exe" && process.ExitCode == 128);
+            HostLog.Info($"exec {(ok ? "ok" : "fail")} exit={process.ExitCode}: {rendered}");
             return new { cmd = fileName, ok, exitCode = process.ExitCode };
         }
-        catch
+        catch (Exception ex)
         {
+            HostLog.Error($"exec threw: {rendered}", ex);
             return new { cmd = fileName, ok = false, exitCode = -1 };
         }
     }
@@ -237,6 +246,7 @@ internal static class LlmService
                 modifiedAt = (string?)null,
                 truncated = false,
                 lines = Array.Empty<string>(),
+                host = HostLog.ReadTail(Math.Min(lines, 200)),
             };
         }
 
@@ -279,6 +289,9 @@ internal static class LlmService
             modifiedAt = modified.ToString("yyyy-MM-dd HH:mm:ss"),
             truncated = bytesTruncated || all.Length > lines,
             lines = tail,
+            // 宿主自身的操作轨迹（启停/切换执行了哪条命令、结果如何），
+            // 与 llama-server 的输出分开返回，前端在日志弹窗里分两段展示。
+            host = HostLog.ReadTail(Math.Min(lines, 200)),
         };
     }
 

@@ -34,7 +34,7 @@ internal static class Program
 
     private static async Task Main()
     {
-        Console.Error.WriteLine("LingXi Flutter NativeHost started");
+        HostLog.Info("NativeHost started (pid " + Environment.ProcessId + ")");
         using var reader = new StreamReader(Console.OpenStandardInput(), Encoding.UTF8, leaveOpen: false);
         await using var writer = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false), leaveOpen: false)
         {
@@ -50,7 +50,7 @@ internal static class Program
             }
             catch (ProtocolException ex)
             {
-                Console.Error.WriteLine($"protocol error: {ex.Code}");
+                HostLog.Error($"protocol error: {ex.Code}");
                 await WriteResponseAsync(writer, Response.Failure(null, ex.Code, "Invalid request"));
                 continue;
             }
@@ -69,7 +69,7 @@ internal static class Program
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"request failed: {ex.GetType().Name}");
+                HostLog.Error($"request failed: {request?.Method ?? "(no method)"}", ex);
                 response = Response.Failure(request?.Id, ErrorCode(ex), PublicError(ex));
             }
 

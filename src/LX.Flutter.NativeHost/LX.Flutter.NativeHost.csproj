@@ -1,6 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!--
+      WinExe = GUI 子系统：进程**不分配控制台**，也不会吸附到父进程的控制台。
+
+      原来是 Exe（控制台子系统），配合 Flutter 侧 Process.start(runInShell:false)
+      会在桌面上留下一个空的控制台窗口（实测标题继承为"管理员: …powershell.exe"）。
+      NativeHost 本身是"stdio JSON-RPC 被 Flutter 拉起的后台宿主"，没有任何需要
+      用户直接看控制台输出的场景；宿主日志走 Flutter 的「模型服务 → 日志」。
+      stdout/stdin 重定向在 GUI 子系统下依然可用（管道不依赖控制台）。
+    -->
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
