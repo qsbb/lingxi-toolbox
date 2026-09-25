@@ -243,11 +243,11 @@ internal static class Program
     {
         lock (Gate)
         {
+            var port = Math.Clamp(OptionalInt(request.Parameters, "port") ?? 2536, 1024, 65535);
+            var bindLan = OptionalBool(request.Parameters, "bindLan") ?? true;
             try
             {
                 _hub?.Dispose();
-                var port = Math.Clamp(OptionalInt(request.Parameters, "port") ?? 2536, 1024, 65535);
-                var bindLan = OptionalBool(request.Parameters, "bindLan") ?? true;
                 var token = Optional(request.Parameters, "token")?.Trim();
                 if (string.IsNullOrWhiteSpace(token)) token = TokenGen.NewToken();
                 if (token.Length > 512) throw new ProtocolException("invalid_token", "token is too long");
@@ -263,8 +263,10 @@ internal static class Program
                 };
                 _store = new SnapshotStore();
                 _store.SetOfflineTimeout(options.OfflineTimeout);
+                HostLog.Info($"hub.start port={port} bindLan={bindLan}");
                 _hub = new LxHub(options, _store);
                 _hub.Start();
+                HostLog.Info($"hub.start ok port={_hub.Port} lanBound={_hub.IsLanBound}");
                 return Response.Success(request.Id, new
                 {
                     port = _hub.Port,
@@ -276,6 +278,7 @@ internal static class Program
             }
             catch (Exception ex)
             {
+                HostLog.Error($"hub.start failed port={port}", ex);
                 return Response.Failure(request.Id, "hub_start_failed", PublicError(ex));
             }
         }
@@ -285,6 +288,7 @@ internal static class Program
     {
         lock (Gate)
         {
+            HostLog.Info(_hub is null ? "hub.stop (no hub running)" : $"hub.stop port={_hub.Port}");
             _hub?.Dispose();
             _hub = null;
             _store = null;
@@ -448,6 +452,7 @@ internal static class Program
 
     private static void Shutdown()
     {
+        HostLog.Info("NativeHost shutting down");
         lock (Gate)
         {
             _hub?.Dispose();
