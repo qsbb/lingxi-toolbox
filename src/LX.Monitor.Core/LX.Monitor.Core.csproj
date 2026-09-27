@@ -3,6 +3,9 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>LingXi.Monitor.Core</RootNamespace>
+    <!-- 显式固定程序集名：宿主在 Xcode 构建阶段调用 dotnet 时，
+         环境里的同名变量会污染默认命名（实测产物会变成 Runner.dll）。 -->
+    <AssemblyName>LX.Monitor.Core</AssemblyName>
     <!-- 领域内核零依赖（HttpListener 跨平台），可在 Linux CI 上直接跑单测；
          System.Management 仅在 Windows 有 WMI 实现，Linux 上调用全部走 catch 降级不崩 -->
   </PropertyGroup>

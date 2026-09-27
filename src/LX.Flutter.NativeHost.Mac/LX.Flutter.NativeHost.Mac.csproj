@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!--
+      macOS 宿主：与 Windows 版（LX.Flutter.NativeHost）保持同一份 JSON Lines 协议
+      （stdin/stdout，14 个方法），差异只在平台后端实现：
+
+        hub.*            → 直接复用 LX.Monitor.Core（纯 .NET，跨平台）
+        audio.*          → CoreAudio（macOS）
+        metrics.snapshot → sysctl / statfs（macOS）
+        net.proxy*       → networksetup（macOS）；无等价修复语义时返回 not_supported
+        llm.*            → launchctl（macOS）；未接入前返回 not_supported
+
+      控制台子系统（非 WinExe）：macOS 没有"吸附到父控制台"的问题，
+      stdout 专供协议，日志写 ~/Library/Logs/LingXi。
+    -->
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>LingXi.Flutter.NativeHost</AssemblyName>
+    <RootNamespace>LingXi.Flutter.NativeHost.Mac</RootNamespace>
+    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\LX.Host.Protocol\LX.Host.Protocol.csproj" />
+    <ProjectReference Include="..\LX.Monitor.Core\LX.Monitor.Core.csproj" />
+  </ItemGroup>
+</Project>

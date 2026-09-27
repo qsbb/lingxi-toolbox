@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- 两个原生宿主（Windows / macOS）共用的 JSON Lines 协议层。
+         抽出来的理由：协议是跨平台契约（14 个方法 + 报文上限 + 错误码），
+         若各自复制一份，改一处忘一处就会两端行为不一致。 -->
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- 显式固定程序集名：宿主在 Xcode 构建阶段调用 dotnet 时，
+         环境里的同名变量（PRODUCT_NAME/EXECUTABLE_NAME）会污染默认命名，
+         导致产物变成 Runner.dll 而引用解析失败。 -->
+    <AssemblyName>LX.Host.Protocol</AssemblyName>
+    <RootNamespace>LingXi.Host.Protocol</RootNamespace>
+  </PropertyGroup>
+</Project>

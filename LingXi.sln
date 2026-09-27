@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -28,6 +28,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LX.Core.Tests", "tests\LX.Core.Tests\LX.Core.Tests.csproj", "{742911F8-0F4F-477A-A5A2-C68D6A448836}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LX.Monitor.Core.Tests", "tests\LX.Monitor.Core.Tests\LX.Monitor.Core.Tests.csproj", "{64B29A4E-7218-4509-A2FB-D599A40E00B0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LX.Host.Protocol", "src\LX.Host.Protocol\LX.Host.Protocol.csproj", "{83953D0B-DB7E-4046-9F4F-4E4F8F9DA263}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -82,6 +84,10 @@ Global
 		{64B29A4E-7218-4509-A2FB-D599A40E00B0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{64B29A4E-7218-4509-A2FB-D599A40E00B0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{64B29A4E-7218-4509-A2FB-D599A40E00B0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{83953D0B-DB7E-4046-9F4F-4E4F8F9DA263}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{83953D0B-DB7E-4046-9F4F-4E4F8F9DA263}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{83953D0B-DB7E-4046-9F4F-4E4F8F9DA263}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{83953D0B-DB7E-4046-9F4F-4E4F8F9DA263}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{122F0A42-C865-47CC-92D4-FB482955E915} = {024F58BF-5C35-48FE-8A5F-801414D88BD2}
@@ -95,5 +101,6 @@ Global
 		{393D2CB4-3663-4A4B-9FA8-DC41A82C8DBA} = {024F58BF-5C35-48FE-8A5F-801414D88BD2}
 		{742911F8-0F4F-477A-A5A2-C68D6A448836} = {E666C4B1-0509-41B4-9E26-99FE9B6D3868}
 		{64B29A4E-7218-4509-A2FB-D599A40E00B0} = {E666C4B1-0509-41B4-9E26-99FE9B6D3868}
+		{83953D0B-DB7E-4046-9F4F-4E4F8F9DA263} = {024F58BF-5C35-48FE-8A5F-801414D88BD2}
 	EndGlobalSection
 EndGlobal

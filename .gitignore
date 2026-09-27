@@ -7,3 +7,7 @@ artifacts/
 TestResults/
 *.tmp
 publish/
+
+# macOS 元数据（AppleDouble / Finder）：tar 跨平台运输时最容易被带进源码树
+.DS_Store
+._*

@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using LingXi.Host.Protocol;
 using LingXi.Audio;
 using LingXi.Monitor.Core;
 
@@ -12,19 +12,6 @@ namespace LingXi.Flutter.NativeHost;
 /// </summary>
 internal static class Program
 {
-    private const int MaxRequestLineLength = 256 * 1024;
-    private const int MaxMethodLength = 80;
-    private const int MaxRequestIdLength = 128;
-    private const int MaxParameterCount = 32;
-    private const int MaxResponseLineLength = 2 * 1024 * 1024;
-
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
-    {
-        PropertyNameCaseInsensitive = true,
-        NumberHandling = JsonNumberHandling.AllowReadingFromString,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
     private static IAudioEndpointService? _audio;
     private static SystemMetricsCollector? _metrics;
     private static SystemProxyService? _proxy;
@@ -46,12 +33,12 @@ internal static class Program
             string? line;
             try
             {
-                line = await ReadLineLimitedAsync(reader, MaxRequestLineLength);
+                line = await JsonLineProtocol.ReadLineLimitedAsync(reader, JsonLineProtocol.MaxRequestLineLength);
             }
             catch (ProtocolException ex)
             {
                 HostLog.Error($"protocol error: {ex.Code}");
-                await WriteResponseAsync(writer, Response.Failure(null, ex.Code, "Invalid request"));
+                await JsonLineProtocol.WriteResponseAsync(writer, Response.Failure(null, ex.Code, "Invalid request"));
                 continue;
             }
 
@@ -62,77 +49,21 @@ internal static class Program
             Response response;
             try
             {
-                request = JsonSerializer.Deserialize<Request>(line, Json)
+                request = JsonSerializer.Deserialize<Request>(line, JsonLineProtocol.Json)
                     ?? throw new ProtocolException("invalid_json", "request is null");
-                Validate(request);
+                JsonLineProtocol.Validate(request);
                 response = await HandleAsync(request);
             }
             catch (Exception ex)
             {
                 HostLog.Error($"request failed: {request?.Method ?? "(no method)"}", ex);
-                response = Response.Failure(request?.Id, ErrorCode(ex), PublicError(ex));
+                response = Response.Failure(request?.Id, JsonLineProtocol.ErrorCode(ex), JsonLineProtocol.PublicError(ex));
             }
 
-            await WriteResponseAsync(writer, response);
+            await JsonLineProtocol.WriteResponseAsync(writer, response);
         }
 
         Shutdown();
-    }
-
-    private static async Task WriteResponseAsync(StreamWriter writer, Response response)
-    {
-        var json = JsonSerializer.Serialize(response, Json);
-        if (Encoding.UTF8.GetByteCount(json) > MaxResponseLineLength)
-        {
-            json = JsonSerializer.Serialize(
-                Response.Failure(response.Id, "response_too_large", "Response exceeds size limit"), Json);
-        }
-        await writer.WriteLineAsync(json);
-    }
-
-    private static async Task<string?> ReadLineLimitedAsync(TextReader reader, int maxLength)
-    {
-        var line = new StringBuilder(Math.Min(maxLength, 4096));
-        var oneChar = new char[1];
-        var readAny = false;
-
-        while (true)
-        {
-            var count = await reader.ReadAsync(oneChar.AsMemory(0, 1));
-            if (count == 0)
-            {
-                if (!readAny) return null;
-                if (line.Length > maxLength)
-                    throw new ProtocolException("request_too_large", "request exceeds size limit");
-                return line.ToString().TrimEnd('\r');
-            }
-
-            readAny = true;
-            var c = oneChar[0];
-            if (c == '\n')
-            {
-                if (line.Length > maxLength)
-                    throw new ProtocolException("request_too_large", "request exceeds size limit");
-                return line.ToString().TrimEnd('\r');
-            }
-
-            // Keep one extra character so an oversized line is rejected without
-            // retaining an unbounded request in memory.
-            if (line.Length <= maxLength) line.Append(c);
-        }
-    }
-
-    private static void Validate(Request request)
-    {
-        var method = request.Method?.Trim() ?? string.Empty;
-        if (method.Length == 0 || method.Length > MaxMethodLength)
-            throw new ProtocolException("invalid_method", "method is invalid");
-        request.Method = method;
-
-        if (request.Id is { Length: > MaxRequestIdLength })
-            throw new ProtocolException("invalid_request_id", "id is too long");
-        if (request.Parameters.Count > MaxParameterCount)
-            throw new ProtocolException("too_many_parameters", "too many parameters");
     }
 
     private static Task<Response> HandleAsync(Request request)
@@ -187,7 +118,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            return Response.Failure(request.Id, "audio_unavailable", PublicError(ex));
+            return Response.Failure(request.Id, "audio_unavailable", JsonLineProtocol.PublicError(ex));
         }
     }
 
@@ -201,7 +132,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            return Response.Failure(request.Id, "audio_unavailable", PublicError(ex));
+            return Response.Failure(request.Id, "audio_unavailable", JsonLineProtocol.PublicError(ex));
         }
     }
 
@@ -216,7 +147,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            return Response.Failure(request.Id, "audio_set_failed", PublicError(ex));
+            return Response.Failure(request.Id, "audio_set_failed", JsonLineProtocol.PublicError(ex));
         }
     }
 
@@ -225,7 +156,7 @@ internal static class Program
         try
         {
             _metrics ??= new SystemMetricsCollector();
-            _metrics.MachineName = Optional(request.Parameters, "name")?.Trim() is { Length: > 0 } name
+            _metrics.MachineName = Parameters.Optional(request.Parameters, "name")?.Trim() is { Length: > 0 } name
                 ? name[..Math.Min(name.Length, 128)]
                 : Environment.MachineName;
             var snapshot = _metrics.Collect();
@@ -235,7 +166,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            return Response.Failure(request.Id, "metrics_failed", PublicError(ex));
+            return Response.Failure(request.Id, "metrics_failed", JsonLineProtocol.PublicError(ex));
         }
     }
 
@@ -243,16 +174,16 @@ internal static class Program
     {
         lock (Gate)
         {
-            var port = Math.Clamp(OptionalInt(request.Parameters, "port") ?? 2536, 1024, 65535);
-            var bindLan = OptionalBool(request.Parameters, "bindLan") ?? true;
+            var port = Math.Clamp(Parameters.OptionalInt(request.Parameters, "port") ?? 2536, 1024, 65535);
+            var bindLan = Parameters.OptionalBool(request.Parameters, "bindLan") ?? true;
             try
             {
                 _hub?.Dispose();
-                var token = Optional(request.Parameters, "token")?.Trim();
+                var token = Parameters.Optional(request.Parameters, "token")?.Trim();
                 if (string.IsNullOrWhiteSpace(token)) token = TokenGen.NewToken();
                 if (token.Length > 512) throw new ProtocolException("invalid_token", "token is too long");
 
-                var offlineTimeout = Math.Clamp(OptionalInt(request.Parameters, "offlineTimeoutSec") ?? 30, 5, 86400);
+                var offlineTimeout = Math.Clamp(Parameters.OptionalInt(request.Parameters, "offlineTimeoutSec") ?? 30, 5, 86400);
                 var options = new HubOptions
                 {
                     Port = port,
@@ -279,7 +210,7 @@ internal static class Program
             catch (Exception ex)
             {
                 HostLog.Error($"hub.start failed port={port}", ex);
-                return Response.Failure(request.Id, "hub_start_failed", PublicError(ex));
+                return Response.Failure(request.Id, "hub_start_failed", JsonLineProtocol.PublicError(ex));
             }
         }
     }
@@ -321,7 +252,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            return Response.Failure(request.Id, "proxy_diagnose_failed", PublicError(ex));
+            return Response.Failure(request.Id, "proxy_diagnose_failed", JsonLineProtocol.PublicError(ex));
         }
     }
 
@@ -330,12 +261,12 @@ internal static class Program
         try
         {
             _proxy ??= new SystemProxyService();
-            var resetWinHttp = OptionalBool(request.Parameters, "resetWinhttp") ?? false;
+            var resetWinHttp = Parameters.OptionalBool(request.Parameters, "resetWinhttp") ?? false;
             return Response.Success(request.Id, await _proxy.RepairAsync(resetWinHttp));
         }
         catch (Exception ex)
         {
-            return Response.Failure(request.Id, "proxy_repair_failed", PublicError(ex));
+            return Response.Failure(request.Id, "proxy_repair_failed", JsonLineProtocol.PublicError(ex));
         }
     }
 
@@ -347,7 +278,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            return Response.Failure(request.Id, "llm_state_failed", PublicError(ex));
+            return Response.Failure(request.Id, "llm_state_failed", JsonLineProtocol.PublicError(ex));
         }
     }
 
@@ -357,12 +288,12 @@ internal static class Program
         {
             var action = Required(request.Parameters, "action", 16)
                 .Trim().ToLowerInvariant();
-            var task = Optional(request.Parameters, "task")?.Trim();
+            var task = Parameters.Optional(request.Parameters, "task")?.Trim();
             return Response.Success(request.Id, LlmService.Execute(action, task));
         }
         catch (Exception ex)
         {
-            return Response.Failure(request.Id, ErrorCode(ex), PublicError(ex));
+            return Response.Failure(request.Id, JsonLineProtocol.ErrorCode(ex), JsonLineProtocol.PublicError(ex));
         }
     }
 
@@ -374,7 +305,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            return Response.Failure(request.Id, "llm_detect_failed", PublicError(ex));
+            return Response.Failure(request.Id, "llm_detect_failed", JsonLineProtocol.PublicError(ex));
         }
     }
 
@@ -382,11 +313,11 @@ internal static class Program
     {
         try
         {
-            return Response.Success(request.Id, LlmService.Log(OptionalInt(request.Parameters, "maxLines")));
+            return Response.Success(request.Id, LlmService.Log(Parameters.OptionalInt(request.Parameters, "maxLines")));
         }
         catch (Exception ex)
         {
-            return Response.Failure(request.Id, "llm_log_failed", PublicError(ex));
+            return Response.Failure(request.Id, "llm_log_failed", JsonLineProtocol.PublicError(ex));
         }
     }
 
@@ -408,7 +339,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            return Response.Failure(request.Id, "invalid_parameters", PublicError(ex));
+            return Response.Failure(request.Id, "invalid_parameters", JsonLineProtocol.PublicError(ex));
         }
     }
 
@@ -418,37 +349,14 @@ internal static class Program
         endpoint.State.ToString().ToLowerInvariant());
 
     private static DataFlow GetFlow(IReadOnlyDictionary<string, object?> parameters) =>
-        string.Equals(Optional(parameters, "flow"), "capture", StringComparison.OrdinalIgnoreCase)
+        string.Equals(Parameters.Optional(parameters, "flow"), "capture", StringComparison.OrdinalIgnoreCase)
             ? DataFlow.Capture
             : DataFlow.Render;
 
     private static string Required(IReadOnlyDictionary<string, object?> parameters, string key, int maxLength) =>
-        Optional(parameters, key) is { Length: > 0 } value && value.Length <= maxLength
+        Parameters.Optional(parameters, key) is { Length: > 0 } value && value.Length <= maxLength
             ? value
             : throw new ArgumentException($"Invalid parameter: {key}");
-
-    private static string? Optional(IReadOnlyDictionary<string, object?> parameters, string key) =>
-        parameters.TryGetValue(key, out var value) ? value?.ToString() : null;
-
-    private static int? OptionalInt(IReadOnlyDictionary<string, object?> parameters, string key) =>
-        int.TryParse(Optional(parameters, key), out var value) ? value : null;
-
-    private static bool? OptionalBool(IReadOnlyDictionary<string, object?> parameters, string key) =>
-        bool.TryParse(Optional(parameters, key), out var value) ? value : null;
-
-    private static string ErrorCode(Exception ex) => ex switch
-    {
-        ProtocolException protocol => protocol.Code,
-        ArgumentException => "invalid_parameters",
-        _ => "native_error",
-    };
-
-    private static string PublicError(Exception ex) => ex switch
-    {
-        ProtocolException => "Invalid request",
-        ArgumentException => "Invalid parameters",
-        _ => "Native operation failed",
-    };
 
     private static void Shutdown()
     {
@@ -464,27 +372,5 @@ internal static class Program
     }
 }
 
-internal sealed class Request
-{
-    public string? Id { get; set; }
-    public string? Method { get; set; }
-    public Dictionary<string, object?>? Params { get; set; }
-    [JsonIgnore]
-    public Dictionary<string, object?> Parameters => Params ??= new(StringComparer.Ordinal);
-}
-
-internal sealed record Response(string? Id, bool Ok, object? Result, ErrorBody? Error)
-{
-    public static Response Success(string? id, object result) => new(id, true, result, null);
-    public static Response Failure(string? id, string code, string message) =>
-        new(id, false, null, new ErrorBody(code, message));
-}
-
-internal sealed record ErrorBody(string Code, string Message);
 internal sealed record AudioDto(string Id, string Name, string State);
 
-internal sealed class ProtocolException : Exception
-{
-    public ProtocolException(string code, string message) : base(message) => Code = code;
-    public string Code { get; }
-}
