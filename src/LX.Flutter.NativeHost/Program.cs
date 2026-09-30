@@ -13,6 +13,7 @@ namespace LingXi.Flutter.NativeHost;
 internal static class Program
 {
     private static IAudioEndpointService? _audio;
+    private static IAudioLoopbackService? _loopback;
     private static SystemMetricsCollector? _metrics;
     private static SystemProxyService? _proxy;
     private static LxHub? _hub;
@@ -77,7 +78,10 @@ internal static class Program
                 protocol = 1,
                 capabilities = new[]
                 {
-                    "audio.list", "audio.default", "audio.setDefault", "metrics.snapshot",
+                    "audio.list", "audio.default", "audio.setDefault",
+                    // 音频监听（设备级捕获 + 转发）：WASAPI 环回实现
+                    "audio.tapCapabilities", "audio.tapStart", "audio.tapStop", "audio.tapState",
+                    "metrics.snapshot",
                     "hub.start", "hub.stop", "hub.listMachines", "hub.getMachine",
                     "net.proxyState", "net.repairProxy",
                     "llm.state", "llm.switch", "llm.detect", "llm.log",
@@ -86,6 +90,10 @@ internal static class Program
             "audio.list" => Task.FromResult(AudioList(request)),
             "audio.default" => Task.FromResult(AudioDefault(request)),
             "audio.setDefault" => Task.FromResult(AudioSetDefault(request)),
+            "audio.tapCapabilities" => Task.FromResult(AudioTapCapabilities(request)),
+            "audio.tapStart" => Task.FromResult(AudioTapStart(request)),
+            "audio.tapStop" => Task.FromResult(AudioTapStop(request)),
+            "audio.tapState" => Task.FromResult(AudioTapState(request)),
             "metrics.snapshot" => Task.FromResult(MetricsSnapshot(request)),
             "hub.start" => Task.FromResult(HubStart(request)),
             "hub.stop" => Task.FromResult(HubStop(request)),
@@ -149,6 +157,141 @@ internal static class Program
         {
             return Response.Failure(request.Id, "audio_set_failed", JsonLineProtocol.PublicError(ex));
         }
+    }
+
+    // ------------------------------------------------------------------ 音频监听（设备级捕获 + 转发）
+
+    private static IAudioLoopbackService? Loopback() =>
+        _loopback ??= AudioLoopbackServiceFactory.Create();
+
+    private static Response AudioTapCapabilities(Request request)
+    {
+        var service = Loopback();
+        if (service is null)
+        {
+            return Response.Success(request.Id, new
+            {
+                supported = false,
+                reason = "当前平台不支持音频监听",
+                maxTargets = 0,
+                canCaptureDevice = false,
+            });
+        }
+        var caps = service.GetCapabilities();
+        return Response.Success(request.Id, new
+        {
+            supported = caps.Supported,
+            reason = caps.Reason,
+            maxTargets = caps.MaxTargets,
+            canCaptureDevice = caps.CanCaptureDevice,
+        });
+    }
+
+    private static Response AudioTapStart(Request request)
+    {
+        var service = Loopback();
+        if (service is null)
+            return Response.Failure(request.Id, "tap_unsupported", "当前平台不支持音频监听");
+
+        try
+        {
+            var source = ReadStringParameter(request.Parameters, "sourceDeviceId")?.Trim();
+            if (string.IsNullOrEmpty(source))
+                throw new ArgumentException("sourceDeviceId is required");
+
+            // targets 兼容数组与逗号分隔字符串（JsonElement 需单独判类型）
+            var targets = new List<string>();
+            if (request.Parameters.TryGetValue("targetDeviceIds", out var raw))
+            {
+                switch (raw)
+                {
+                    case JsonElement { ValueKind: JsonValueKind.Array } array:
+                        foreach (var item in array.EnumerateArray())
+                        {
+                            var value = item.GetString()?.Trim();
+                            if (!string.IsNullOrEmpty(value)) targets.Add(value);
+                        }
+                        break;
+                    case JsonElement { ValueKind: JsonValueKind.String } single:
+                        targets.AddRange((single.GetString() ?? string.Empty)
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+                        break;
+                    case string joined:
+                        targets.AddRange(joined.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+                        break;
+                }
+            }
+            if (targets.Count == 0)
+                throw new ArgumentException("targetDeviceIds is required");
+
+            var gain = double.TryParse(ReadStringParameter(request.Parameters, "gain"), out var g) ? g : 1.0;
+            var session = service.Start(new AudioTapRequest(source, targets, gain));
+            HostLog.Info($"audio.tapStart source={source} targets={targets.Count} sr={session.SampleRate} latency={session.LatencyMs:F1}ms");
+            return Response.Success(request.Id, new
+            {
+                sessionId = session.SessionId,
+                sourceDeviceId = session.SourceDeviceId,
+                targetDeviceIds = session.TargetDeviceIds,
+                sampleRate = session.SampleRate,
+                channels = session.Channels,
+                latencyMs = session.LatencyMs,
+                latencyEstimated = session.LatencyEstimated,
+            });
+        }
+        catch (AudioTapException ex)
+        {
+            HostLog.Error($"audio.tapStart failed: {ex.Code}");
+            return Response.Failure(request.Id, ex.Code, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            HostLog.Error("audio.tapStart failed", ex);
+            return Response.Failure(request.Id, "tap_start_failed", JsonLineProtocol.PublicError(ex));
+        }
+    }
+
+    private static Response AudioTapStop(Request request)
+    {
+        try
+        {
+            Loopback()?.Stop(ReadStringParameter(request.Parameters, "sessionId"));
+            HostLog.Info("audio.tapStop");
+            return Response.Success(request.Id, new { stopped = true });
+        }
+        catch (Exception ex)
+        {
+            HostLog.Error("audio.tapStop failed", ex);
+            return Response.Failure(request.Id, "tap_stop_failed", JsonLineProtocol.PublicError(ex));
+        }
+    }
+
+    private static Response AudioTapState(Request request)
+    {
+        var status = Loopback()?.GetStatus();
+        if (status is null) return Response.Success(request.Id, new { active = false });
+        return Response.Success(request.Id, new
+        {
+            active = status.Active,
+            sessionId = status.SessionId,
+            sourceDeviceId = status.SourceDeviceId,
+            targetDeviceIds = status.TargetDeviceIds,
+            peakLeft = status.PeakLeft,
+            peakRight = status.PeakRight,
+            droppedFrames = status.DroppedFrames,
+            uptimeSeconds = status.UptimeSeconds,
+        });
+    }
+
+    /// <summary>读取字符串参数（兼容 JsonElement / 原生 string）。</summary>
+    private static string? ReadStringParameter(IReadOnlyDictionary<string, object?> parameters, string key)
+    {
+        if (!parameters.TryGetValue(key, out var raw)) return null;
+        return raw switch
+        {
+            JsonElement { ValueKind: JsonValueKind.String } e => e.GetString(),
+            JsonElement e => e.ToString(),
+            _ => raw?.ToString(),
+        };
     }
 
     private static Response MetricsSnapshot(Request request)
@@ -365,8 +508,10 @@ internal static class Program
         {
             _hub?.Dispose();
             _audio?.Dispose();
+            _loopback?.Dispose();
             _hub = null;
             _audio = null;
+            _loopback = null;
             _store = null;
         }
     }

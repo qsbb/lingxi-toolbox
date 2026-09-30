@@ -25,6 +25,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\LX.Host.Protocol\LX.Host.Protocol.csproj" />
+    <ProjectReference Include="..\LX.Audio.Core\LX.Audio.Core.csproj" />
     <ProjectReference Include="..\LX.Monitor.Core\LX.Monitor.Core.csproj" />
   </ItemGroup>
 </Project>
