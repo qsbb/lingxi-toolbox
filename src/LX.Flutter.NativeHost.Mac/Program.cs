@@ -22,6 +22,8 @@ internal static class Program
         "hub.start", "hub.stop", "hub.listMachines", "hub.getMachine",
         "net.proxyState", "net.repairProxy",
         "llm.state", "llm.switch", "llm.detect", "llm.log",
+        // RVC 服务进程控制：Mac 本机用 launchctl 按需启停（无常驻）
+        "rvc.state", "rvc.switch",
     ];
 
     private static MacAudioService? _audio;
@@ -102,6 +104,8 @@ internal static class Program
         // llm.state 即使拿不到计划任务也要**成功返回**：前端靠 tasksAvailable=false
         // 把启停/切换区置灰并给出说明（"仅服务器本机可操作"），
         // 若整条调用失败则 _hostState 为 null，按钮只会灰着而不解释。
+        "rvc.state" => Task.FromResult(Response.Success(request.Id, RvcService.State())),
+        "rvc.switch" => Task.FromResult(RvcSwitch(request)),
         "llm.state" => Task.FromResult(Response.Success(request.Id, new
         {
             processRunning = LocalLlamaServerRunning(),
@@ -134,6 +138,23 @@ internal static class Program
     }
 
     /// <summary>本机是否有 llama-server 进程（macOS 版也可能在本地起服务）。</summary>
+    /// <summary>RVC 服务启停。action 白名单在 RvcService 里校验。</summary>
+    private static Response RvcSwitch(Request request)
+    {
+        try
+        {
+            var action = (ReadStringParameter(request.Parameters, "action") ?? "")
+                .Trim().ToLowerInvariant();
+            if (action.Length == 0)
+                throw new ArgumentException("缺少 action 参数");
+            return Response.Success(request.Id, RvcService.Switch(action));
+        }
+        catch (Exception ex)
+        {
+            return Response.Failure(request.Id, JsonLineProtocol.ErrorCode(ex), JsonLineProtocol.PublicError(ex));
+        }
+    }
+
     private static bool LocalLlamaServerRunning()
     {
         try

@@ -85,6 +85,8 @@ internal static class Program
                     "hub.start", "hub.stop", "hub.listMachines", "hub.getMachine",
                     "net.proxyState", "net.repairProxy",
                     "llm.state", "llm.switch", "llm.detect", "llm.log",
+                    // RVC 服务进程控制：通过 SSH 启停 Mac 上的 launchd 任务
+                    "rvc.state", "rvc.switch",
                 },
             })),
             "audio.list" => Task.FromResult(AudioList(request)),
@@ -101,6 +103,8 @@ internal static class Program
             "hub.getMachine" => Task.FromResult(HubGetMachine(request)),
             "net.proxyState" => ProxyState(request),
             "net.repairProxy" => RepairProxy(request),
+            "rvc.state" => Task.FromResult(RvcState(request)),
+            "rvc.switch" => Task.FromResult(RvcSwitch(request)),
             "llm.state" => Task.FromResult(LlmState(request)),
             "llm.switch" => Task.FromResult(LlmSwitch(request)),
             "llm.detect" => Task.FromResult(LlmDetect(request)),
@@ -422,6 +426,38 @@ internal static class Program
         catch (Exception ex)
         {
             return Response.Failure(request.Id, "llm_state_failed", JsonLineProtocol.PublicError(ex));
+        }
+    }
+
+    /// <summary>RVC 服务状态（远程问 Mac，只读）。</summary>
+    private static Response RvcState(Request request)
+    {
+        try
+        {
+            return Response.Success(request.Id, RvcService.State(
+                Parameters.Optional(request.Parameters, "host"),
+                Parameters.Optional(request.Parameters, "user")));
+        }
+        catch (Exception ex)
+        {
+            return Response.Failure(request.Id, JsonLineProtocol.ErrorCode(ex), JsonLineProtocol.PublicError(ex));
+        }
+    }
+
+    /// <summary>RVC 服务启停（SSH 到 Mac 执行 launchctl）。</summary>
+    private static Response RvcSwitch(Request request)
+    {
+        try
+        {
+            var action = Required(request.Parameters, "action", 16).Trim().ToLowerInvariant();
+            return Response.Success(request.Id, RvcService.Switch(
+                action,
+                Parameters.Optional(request.Parameters, "host"),
+                Parameters.Optional(request.Parameters, "user")));
+        }
+        catch (Exception ex)
+        {
+            return Response.Failure(request.Id, JsonLineProtocol.ErrorCode(ex), JsonLineProtocol.PublicError(ex));
         }
     }
 
