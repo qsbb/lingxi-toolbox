@@ -429,14 +429,16 @@ internal static class Program
         }
     }
 
-    /// <summary>RVC 服务状态（远程问 Mac，只读）。</summary>
+    /// <summary>
+    /// RVC 服务进程状态。Windows 端**不支持**启停（见 RvcService 注释），
+    /// 恒返回 controllable=false，前端据此置灰并提示「仅服务器本机可操作」。
+    /// 服务本身的状态（当前模型/推理/客户端）走 HTTP /api/models，与这里无关。
+    /// </summary>
     private static Response RvcState(Request request)
     {
         try
         {
-            return Response.Success(request.Id, RvcService.State(
-                Parameters.Optional(request.Parameters, "host"),
-                Parameters.Optional(request.Parameters, "user")));
+            return Response.Success(request.Id, RvcService.State());
         }
         catch (Exception ex)
         {
@@ -444,16 +446,17 @@ internal static class Program
         }
     }
 
-    /// <summary>RVC 服务启停（SSH 到 Mac 执行 launchctl）。</summary>
+    /// <summary>RVC 启停：Windows 端返回结构化 not_supported，前端据此降级。</summary>
     private static Response RvcSwitch(Request request)
     {
         try
         {
             var action = Required(request.Parameters, "action", 16).Trim().ToLowerInvariant();
-            return Response.Success(request.Id, RvcService.Switch(
-                action,
-                Parameters.Optional(request.Parameters, "host"),
-                Parameters.Optional(request.Parameters, "user")));
+            return Response.Success(request.Id, RvcService.Switch(action));
+        }
+        catch (NotSupportedException ex)
+        {
+            return Response.Failure(request.Id, "not_supported", ex.Message);
         }
         catch (Exception ex)
         {
