@@ -15,9 +15,22 @@ internal static class HostLog
     private const int KeepDays = 7;
 
     private static readonly object Gate = new();
-    private static readonly string Dir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        "Library", "Logs", "LingXi");
+    private static readonly string Dir = ResolveDir();
+
+    /// 隔离运行（`LINGXI_HOME`）时写进 `<LINGXI_HOME>/logs`，与 Flutter 侧同一个
+    /// 目录；否则沿用 macOS 约定 `~/Library/Logs/LingXi`。开发实例因此不会把
+    /// 日志混进安装版的 `nativehost-*.log`。
+    private static string ResolveDir()
+    {
+        var isolated = Environment.GetEnvironmentVariable("LINGXI_HOME");
+        if (!string.IsNullOrWhiteSpace(isolated))
+        {
+            return Path.Combine(isolated.Trim(), "logs");
+        }
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Library", "Logs", "LingXi");
+    }
 
     private static string CurrentPath => Path.Combine(Dir, $"nativehost-{DateTime.Now:yyyyMMdd}.log");
 
