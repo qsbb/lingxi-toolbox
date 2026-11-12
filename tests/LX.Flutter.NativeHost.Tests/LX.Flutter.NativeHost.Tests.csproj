@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <Compile Include="../../src/LX.Flutter.NativeHost/RvcService.cs" Link="RvcService.cs" />
+    <Compile Include="../../src/LX.Flutter.NativeHost/PhonePcmEncoder.cs" Link="PhonePcmEncoder.cs" />
+    <Compile Include="../../src/LX.Flutter.NativeHost/PhoneAudioRoute.cs" Link="PhoneAudioRoute.cs" />
+    <Compile Include="../../src/LX.Flutter.NativeHost/PhoneAudioReceiver.cs" Link="PhoneAudioReceiver.cs" />
+  </ItemGroup>
+</Project>

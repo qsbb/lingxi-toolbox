@@ -16,6 +16,7 @@ internal static class Program
     private static IAudioLoopbackService? _loopback;
     private static SystemMetricsCollector? _metrics;
     private static SystemProxyService? _proxy;
+    private static PhoneAudioReceiver? _phoneReceiver;
     private static LxHub? _hub;
     private static SnapshotStore? _store;
     private static readonly object Gate = new();
@@ -87,6 +88,7 @@ internal static class Program
                     "llm.state", "llm.switch", "llm.detect", "llm.log",
                     // RVC 服务进程控制：通过 SSH 启停 Mac 上的 launchd 任务
                     "rvc.state", "rvc.switch",
+                    "rvc.receiverState", "rvc.receiverStart", "rvc.receiverStop", "rvc.virtualMicProbe",
                 },
             })),
             "audio.list" => Task.FromResult(AudioList(request)),
@@ -105,6 +107,10 @@ internal static class Program
             "net.repairProxy" => RepairProxy(request),
             "rvc.state" => Task.FromResult(RvcState(request)),
             "rvc.switch" => Task.FromResult(RvcSwitch(request)),
+            "rvc.virtualMicProbe" => Task.FromResult(VirtualMicProbe(request)),
+            "rvc.receiverState" => Task.FromResult(PhoneReceiverState(request)),
+            "rvc.receiverStart" => Task.FromResult(PhoneReceiverStart(request)),
+            "rvc.receiverStop" => Task.FromResult(PhoneReceiverStop(request)),
             "llm.state" => Task.FromResult(LlmState(request)),
             "llm.switch" => Task.FromResult(LlmSwitch(request)),
             "llm.detect" => Task.FromResult(LlmDetect(request)),
@@ -430,9 +436,8 @@ internal static class Program
     }
 
     /// <summary>
-    /// RVC 服务进程状态。Windows 端**不支持**启停（见 RvcService 注释），
-    /// 恒返回 controllable=false，前端据此置灰并提示「仅服务器本机可操作」。
-    /// 服务本身的状态（当前模型/推理/客户端）走 HTTP /api/models，与这里无关。
+    /// RVC 服务进程状态：通过密钥 SSH 调用一次性控制脚本。
+    /// 未配置或连接失败时返回可解释的降级状态，不阻塞/重启宿主。
     /// </summary>
     private static Response RvcState(Request request)
     {
@@ -446,7 +451,7 @@ internal static class Program
         }
     }
 
-    /// <summary>RVC 启停：Windows 端返回结构化 not_supported，前端据此降级。</summary>
+    /// <summary>RVC 启停：密钥 SSH，无常驻控制服务，action 只接受 start/stop。</summary>
     private static Response RvcSwitch(Request request)
     {
         try
@@ -461,6 +466,71 @@ internal static class Program
         catch (Exception ex)
         {
             return Response.Failure(request.Id, JsonLineProtocol.ErrorCode(ex), JsonLineProtocol.PublicError(ex));
+        }
+    }
+
+    private static Response VirtualMicProbe(Request request)
+    {
+        try
+        {
+            if (!OperatingSystem.IsWindows())
+                return Response.Success(request.Id, new { supported = false, reason = "仅 Windows 可用" });
+            var render = PhoneAudioRoute.ResolveRenderEndpoint(VirtualMicRenderWriter.Devices());
+            var capture = PhoneAudioRoute.ResolveCaptureEndpoint(PhoneAudioReceiver.CaptureDeviceNamesForProbe());
+            return Response.Success(request.Id, new
+            {
+                supported = true,
+                renderEndpoint = render?.Name,
+                captureEndpoint = capture,
+                endpointPairPresent = render is not null && capture is not null,
+            });
+        }
+        catch (Exception ex)
+        {
+            return Response.Failure(request.Id, "virtual_mic_probe_failed", JsonLineProtocol.PublicError(ex));
+        }
+    }
+
+    private static Response PhoneReceiverState(Request request)
+    {
+        try
+        {
+            if (!OperatingSystem.IsWindows())
+                return Response.Success(request.Id, new { supported = false, running = false, reason = "Windows 接收端仅支持 Windows" });
+            _phoneReceiver ??= new PhoneAudioReceiver();
+            return Response.Success(request.Id, _phoneReceiver.State());
+        }
+        catch (Exception ex)
+        {
+            return Response.Failure(request.Id, "phone_receiver_state_failed", JsonLineProtocol.PublicError(ex));
+        }
+    }
+
+    private static Response PhoneReceiverStart(Request request)
+    {
+        try
+        {
+            if (!OperatingSystem.IsWindows())
+                return Response.Failure(request.Id, "not_supported", "Windows 接收端仅支持 Windows");
+            _phoneReceiver ??= new PhoneAudioReceiver();
+            return Response.Success(request.Id, _phoneReceiver.Start());
+        }
+        catch (Exception ex)
+        {
+            return Response.Failure(request.Id, "phone_receiver_start_failed", JsonLineProtocol.PublicError(ex));
+        }
+    }
+
+    private static Response PhoneReceiverStop(Request request)
+    {
+        try
+        {
+            _phoneReceiver ??= new PhoneAudioReceiver();
+            return Response.Success(request.Id, _phoneReceiver.Stop());
+        }
+        catch (Exception ex)
+        {
+            return Response.Failure(request.Id, "phone_receiver_stop_failed", JsonLineProtocol.PublicError(ex));
         }
     }
 
@@ -545,6 +615,8 @@ internal static class Program
         HostLog.Info("NativeHost shutting down");
         lock (Gate)
         {
+            _phoneReceiver?.Dispose();
+            _phoneReceiver = null;
             _hub?.Dispose();
             _audio?.Dispose();
             _loopback?.Dispose();
